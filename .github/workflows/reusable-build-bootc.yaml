@@ -275,7 +275,9 @@ jobs:
           REGISTRY: ghcr.io
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
-        run: echo "${GITHUB_TOKEN}" | podman login -u "${GITHUB_ACTOR}" --password-stdin "${REGISTRY}"
+        run: |
+          echo "${GITHUB_TOKEN}" | podman login -u "${GITHUB_ACTOR}" --password-stdin "${REGISTRY}"
+          echo "${GITHUB_TOKEN}" | docker login -u "${GITHUB_ACTOR}" --password-stdin "${REGISTRY}"
 
       - name: Fetch Build Outputs
         if: inputs.publish
