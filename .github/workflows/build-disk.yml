@@ -1,24 +1,16 @@
 ---
-name: Build disk image
+name: Build Astral ISO
 on:
-  schedule:
-    - cron: "0 1 * * TUE"
   workflow_dispatch:
 
 jobs:
   build_release:
-    name: Build and release disk image
+    name: Build AMD64 ISO
     permissions:
       contents: read
       packages: read
-      id-token: write
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: ["amd64", "arm64"]
-        flavor: ["", "-nvidia"]
-    runs-on: ${{ matrix.platform == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Free disk space
@@ -32,8 +24,8 @@ jobs:
       - name: Build ISO
         id: build-iso
         env:
-          TARGET_IMAGE: ghcr.io/iiroan/${{ github.event.repository.name }}${{ matrix.flavor }}:latest
-          TARGET_CONFIG: ${{ matrix.flavor == '-nvidia' && './iso-nvidia.toml' || './iso.toml' }}
+          TARGET_IMAGE: ghcr.io/iiroan/astral:latest
+          TARGET_CONFIG: ./iso.toml
         run: |
           sudo podman pull "${TARGET_IMAGE}"
           sudo mkdir -p rpm-gpg output
@@ -51,22 +43,8 @@ jobs:
             "${TARGET_IMAGE}"
           echo "output-directory=$(realpath ./output)" >> $GITHUB_OUTPUT
 
-      - name: Upload Artifact
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: ${{ github.event.repository.name }}${{ matrix.flavor }}-${{ matrix.platform }}
-          path: ${{ steps.build-iso.outputs.output-directory }}
-          if-no-files-found: error
-          retention-days: 0
-          compression-level: 0
-          overwrite: true
-
       - name: Brand ISOs
         env:
-          FLAVOR: ${{ matrix.flavor }}
-          PLATFORM: ${{ matrix.platform }}
-          IMAGE_NAME: "${{ github.event.repository.name }}"
           SOURCE_DIR: ${{ steps.build-iso.outputs.output-directory }}
         run: |
           sudo mv "${SOURCE_DIR}"/*/*.iso "${SOURCE_DIR}/astral-unbranded.iso"
@@ -90,24 +68,17 @@ jobs:
                 --replace "vmlinuz" "vmlinuz inst.resolution=1280x800" \
                 /output/astral-unbranded.iso \
                 /output/astral.iso'
-          sudo mv "${SOURCE_DIR}"/astral.iso "${SOURCE_DIR}/${IMAGE_NAME}${FLAVOR}-${PLATFORM}.iso"
-          (cd ${SOURCE_DIR} && sha256sum "${IMAGE_NAME}${FLAVOR}-${PLATFORM}.iso" | sudo tee "${IMAGE_NAME}${FLAVOR}-${PLATFORM}.iso-CHECKSUM")
+          sudo mv "${SOURCE_DIR}"/astral.iso "${SOURCE_DIR}/astral-amd64.iso"
+          (cd "${SOURCE_DIR}" && sha256sum astral-amd64.iso | sudo tee astral-amd64.iso-CHECKSUM)
           sudo rm -f "${SOURCE_DIR}/astral-unbranded.iso"
 
-      - name: Upload to S3
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-        shell: bash
-        env:
-          RCLONE_CONFIG_S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
-          RCLONE_CONFIG_S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
-          RCLONE_CONFIG_S3_PROVIDER: ${{ secrets.S3_PROVIDER }}
-          RCLONE_CONFIG_S3_REGION: ${{ secrets.S3_REGION }}
-          RCLONE_CONFIG_S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
-          RCLONE_CONFIG_S3_TYPE: s3
-          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
-          SOURCE_DIR: ${{ steps.build-iso.outputs.output-directory }}
-        run: |
-          sudo apt update -y
-          sudo apt install -y rclone
-          rclone copy "${SOURCE_DIR}"/*.iso "S3:${S3_BUCKET_NAME}"
-          rclone copy "${SOURCE_DIR}"/*.iso-CHECKSUM "S3:${S3_BUCKET_NAME}"
+      - name: Upload ISO
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: astral-amd64
+          path: |
+            ${{ steps.build-iso.outputs.output-directory }}/astral-amd64.iso
+            ${{ steps.build-iso.outputs.output-directory }}/astral-amd64.iso-CHECKSUM
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0

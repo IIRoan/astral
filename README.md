@@ -16,7 +16,7 @@ Astral identity.
 - Visual Studio Code from Microsoft's official RPM repository.
 - Integrated wallpapers, logos, and default dotfiles. This repository has no
   asset or dotfile submodules.
-- AMD/Intel and NVIDIA bootc image workflows for AMD64 and ARM64.
+- A stable Fedora 44 bootc image for AMD64 and ARM64.
 
 ## Install
 
@@ -26,15 +26,8 @@ Rebase an existing Fedora Atomic installation to the standard image:
 sudo bootc switch ghcr.io/iiroan/astral:latest
 ```
 
-For supported NVIDIA GPUs, use:
-
-```bash
-sudo bootc switch ghcr.io/iiroan/astral-nvidia:latest
-```
-
-The image must be published and signed by the repository workflows before these
-commands can be used. The NVIDIA kernel module is not signed, so Secure Boot is
-not supported by the NVIDIA image.
+The image must be published and signed by the repository workflow before this
+command can be used.
 
 ## Desktop Defaults
 
@@ -77,8 +70,9 @@ Install `mkosi`, `just`, and Podman, then build the standard bootc image:
 just build
 ```
 
-The GitHub Actions workflows publish multi-architecture images to GHCR on pushes
-to the default branch.
+GitHub Actions publishes the multi-architecture image to GHCR on pushes to the
+default branch. The separate manual ISO workflow builds an AMD64 installer and
+stores it as a seven-day Actions artifact.
 
 ## Upstream And Licensing
 
