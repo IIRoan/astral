@@ -147,12 +147,14 @@ jobs:
         run: |
           set -euo pipefail
           : "${SIGNING_SECRET:?SIGNING_SECRET must be configured when publishing}"
+          sudo install -d -m 0755 "/etc/containers/registries.d/"
+          printf 'docker:\n  %s:\n    use-sigstore-attachments: true\n' "${IMAGE_REGISTRY}" | sudo tee "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml" > /dev/null
+          sudo chmod 0644 "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml"
+
           umask 077
           PRIVATE_KEY_FILE="$(mktemp)"
           printf '%s\n' "${SIGNING_SECRET}" > "${PRIVATE_KEY_FILE}"
           trap 'rm -f "${PRIVATE_KEY_FILE}"' EXIT
-          sudo mkdir -p "/etc/containers/registries.d/"
-          echo -e "docker:\n  ${IMAGE_REGISTRY}:\n    use-sigstore-attachments: true" | sudo tee "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml"
 
           DIGESTFILE="/tmp/digestfile" # This needs to be r/w, non-existent so that podman can write to it
           # HACK: push two times so layer annotations are present
@@ -290,17 +292,20 @@ jobs:
         env:
           SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
           LABELS: ${{ steps.metadata.outputs.labels }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
           TAGS: ${{ steps.metadata.outputs.tags }}
         run: |
           set -euo pipefail
           : "${SIGNING_SECRET:?SIGNING_SECRET must be configured when publishing}"
+          sudo install -d -m 0755 "/etc/containers/registries.d/"
+          printf 'docker:\n  %s:\n    use-sigstore-attachments: true\n' "${IMAGE_REGISTRY}" | sudo tee "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml" > /dev/null
+          sudo chmod 0644 "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml"
+
           umask 077
 
           PRIVATE_KEY_FILE="$(mktemp)"
           printf '%s\n' "${SIGNING_SECRET}" > "${PRIVATE_KEY_FILE}"
           trap 'rm -f "${PRIVATE_KEY_FILE}"' EXIT
-          sudo mkdir -p "/etc/containers/registries.d/"
-          echo -e "docker:\n  ${IMAGE_REGISTRY}:\n    use-sigstore-attachments: true" | sudo tee "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml"
 
           TARGET_MANIFEST="${IMAGE_REGISTRY}/${IMAGE_NAME}"
 
