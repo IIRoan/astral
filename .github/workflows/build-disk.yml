@@ -32,7 +32,7 @@ jobs:
       - name: Build ISO
         id: build-iso
         env:
-          TARGET_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}${{ matrix.flavor }}:latest
+          TARGET_IMAGE: ghcr.io/iiroan/${{ github.event.repository.name }}${{ matrix.flavor }}:latest
           TARGET_CONFIG: ${{ matrix.flavor == '-nvidia' && './iso-nvidia.toml' || './iso.toml' }}
         run: |
           sudo podman pull "${TARGET_IMAGE}"
