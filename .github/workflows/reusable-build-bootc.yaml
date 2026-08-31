@@ -71,7 +71,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write
     timeout-minutes: 60
     needs: generate_matrix
     strategy:
@@ -146,10 +145,12 @@ jobs:
           REPOSITORY_OWNER: ${{ github.repository_owner }}
           SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
         run: |
-          set -x
+          set -euo pipefail
+          : "${SIGNING_SECRET:?SIGNING_SECRET must be configured when publishing}"
+          umask 077
           PRIVATE_KEY_FILE="$(mktemp)"
-          echo "${SIGNING_SECRET}" > "${PRIVATE_KEY_FILE}"
-          trap 'rm -f $PRIVATE_KEY_FILE' EXIT
+          printf '%s\n' "${SIGNING_SECRET}" > "${PRIVATE_KEY_FILE}"
+          trap 'rm -f "${PRIVATE_KEY_FILE}"' EXIT
           sudo mkdir -p "/etc/containers/registries.d/"
           echo -e "docker:\n  ${IMAGE_REGISTRY}:\n    use-sigstore-attachments: true" | sudo tee "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml"
 
@@ -192,6 +193,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - name: Exit on failure
         shell: bash
@@ -282,6 +284,7 @@ jobs:
           path: /tmp/artifacts
 
       - name: Publish manifest with unified architecture and sign
+        id: publish
         shell: bash
         if: inputs.publish
         env:
@@ -289,11 +292,13 @@ jobs:
           LABELS: ${{ steps.metadata.outputs.labels }}
           TAGS: ${{ steps.metadata.outputs.tags }}
         run: |
-          set -x
+          set -euo pipefail
+          : "${SIGNING_SECRET:?SIGNING_SECRET must be configured when publishing}"
+          umask 077
 
           PRIVATE_KEY_FILE="$(mktemp)"
-          echo "${SIGNING_SECRET}" > "${PRIVATE_KEY_FILE}"
-          trap 'rm -f $PRIVATE_KEY_FILE' EXIT
+          printf '%s\n' "${SIGNING_SECRET}" > "${PRIVATE_KEY_FILE}"
+          trap 'rm -f "${PRIVATE_KEY_FILE}"' EXIT
           sudo mkdir -p "/etc/containers/registries.d/"
           echo -e "docker:\n  ${IMAGE_REGISTRY}:\n    use-sigstore-attachments: true" | sudo tee "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml"
 
@@ -320,7 +325,24 @@ jobs:
             # TODO: remove me when https://github.com/containers/podman/issues/27796 fixed
             for _ in $(seq 2); do
               while IFS= read -r TAG; do
-                podman manifest push --all=false --compression-format=zstd "${TARGET_MANIFEST}" "${TARGET_MANIFEST}:${TAG}" "--sign-passphrase-file=/dev/null" "--sign-by-sigstore-private-key=${PRIVATE_KEY_FILE}"
+                DIGEST_ARGUMENT=()
+                if [ "${TAG}" = "${DEFAULT_TAG}" ]; then
+                  rm -f /tmp/manifest-digest
+                  DIGEST_ARGUMENT+=(--digestfile=/tmp/manifest-digest)
+                fi
+                podman manifest push --all=false --compression-format=zstd "${DIGEST_ARGUMENT[@]}" "${TARGET_MANIFEST}" "${TARGET_MANIFEST}:${TAG}" "--sign-passphrase-file=/dev/null" "--sign-by-sigstore-private-key=${PRIVATE_KEY_FILE}"
               done <<< "${TAGS}"
             done
           done
+
+          test -s /tmp/manifest-digest
+          echo "digest=$(< /tmp/manifest-digest)" >> "${GITHUB_OUTPUT}"
+
+      - name: Attest image provenance
+        if: inputs.publish
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-name: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false

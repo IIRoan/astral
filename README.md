@@ -74,6 +74,16 @@ GitHub Actions publishes the multi-architecture image to GHCR on pushes to the
 default branch. The separate manual ISO workflow builds an AMD64 installer and
 stores it as a seven-day Actions artifact.
 
+## Update Security
+
+Published architecture images and the final multi-architecture manifest are
+signed with Astral's Sigstore private key. The installed containers policy
+requires signatures matching the vendored `astral.pub` key for images under
+`ghcr.io/iiroan`, so `bootc` updates reject images that are not signed by
+Astral. Each published manifest also receives GitHub-hosted SLSA build
+provenance tied to its immutable digest. Workflow actions are pinned to full
+commit hashes, and the signing secret is only exposed to publishing steps.
+
 ## Upstream And Licensing
 
 Astral is derived from
