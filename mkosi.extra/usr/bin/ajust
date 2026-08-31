@@ -1,2 +1,22 @@
 #!/usr/bin/env bash
-just -f /usr/share/astral/just/00-start.just "${@}"
+set -euo pipefail
+
+JUSTFILE="${ASTRAL_JUSTFILE:-/usr/share/astral/just/00-start.just}"
+
+if [[ ! -f "${JUSTFILE}" ]]; then
+  echo "ajust: missing ${JUSTFILE}" >&2
+  exit 1
+fi
+
+if ! command -v just >/dev/null 2>&1; then
+  echo "ajust: just is not installed" >&2
+  exit 1
+fi
+
+case "${1:-}" in
+  -h | --help | help)
+    exec just --justfile "${JUSTFILE}" --list --unsorted --list-heading $'Astral commands (ajust <recipe>):\n'
+    ;;
+esac
+
+exec just --justfile "${JUSTFILE}" "$@"

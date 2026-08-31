@@ -62,6 +62,18 @@ Astral installs `podman-docker` and `podman-compose`, selects
 `podman.socket` for each user, and exports the rootless socket through
 `DOCKER_HOST`.
 
+## System commands
+
+On a running system, `ajust` is the user-facing command menu:
+
+```bash
+ajust
+ajust status
+ajust verify-image
+ajust update
+ajust --help
+```
+
 ## Build
 
 Install `mkosi`, `just`, and Podman, then build the standard bootc image:
@@ -71,7 +83,8 @@ just build
 ```
 
 GitHub Actions publishes the multi-architecture image to GHCR on pushes to the
-default branch. The separate manual ISO workflow builds an AMD64 installer and
+default branch and on a weekly schedule so Fedora security updates land without a
+manual commit. The separate manual ISO workflow builds an AMD64 installer and
 stores it as a seven-day Actions artifact.
 
 ## Update Security
@@ -81,8 +94,10 @@ signed with Astral's Sigstore private key. The installed containers policy
 requires signatures matching the vendored `astral.pub` key for images under
 `ghcr.io/iiroan`, so `bootc` updates reject images that are not signed by
 Astral. Each published manifest also receives GitHub-hosted SLSA build
-provenance tied to its immutable digest. Workflow actions are pinned to full
-commit hashes, and the signing secret is only exposed to publishing steps.
+provenance tied to its immutable digest. After publish, CI verifies the
+Sigstore signature against `astral.pub` and the provenance attestation before
+the workflow succeeds. Workflow actions are pinned to full commit hashes, and
+the signing secret is only exposed to publishing steps.
 
 ## Upstream And Licensing
 

@@ -12,11 +12,12 @@ if test ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/astral/no-show-user-motd" ; then
 
      Command                        │ Description
   ───────────────────────────────────┼────────────────────────────────────
-    ${slight_red} ajust toggle-user-motd ${reset}         │ Toggle this banner on/off
-    ${slight_red} ajust update-dotfiles ${reset}          │ Update your unmodified dotfiles
-    ${slight_red} ajust update-greeter ${reset}           │ Update your greeter with modifications from your current user
-    ${slight_red} ajust reset-niri ${reset}               │ Reset niri to the default configuration
+    ${slight_red} ajust status ${reset}                  │ Show image, policy, and container status
+    ${slight_red} ajust verify-image ${reset}            │ Confirm the local image signature policy
     ${slight_red} ajust update ${reset}                   │ Manually update the system
+    ${slight_red} ajust update-dotfiles ${reset}          │ Update your unmodified dotfiles
+    ${slight_red} ajust update-greeter ${reset}           │ Sync the greeter from this user
+    ${slight_red} ajust toggle-user-motd ${reset}         │ Toggle this banner on/off
 
 EOF
 fi
