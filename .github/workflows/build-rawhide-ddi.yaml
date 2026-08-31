@@ -1,4 +1,4 @@
-name: Build Zirconium Rawhide DDI
+name: Build Astral Rawhide DDI
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
     uses: ./.github/workflows/reusable-build-ddi.yaml
     secrets: inherit
     with:
-      image-name: zirconium
+      image-name: astral
       platforms: amd64,arm64
       default-tag: rawhide
       release: rawhide

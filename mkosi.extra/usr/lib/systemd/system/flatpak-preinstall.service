@@ -3,14 +3,14 @@ Description=Preinstall Flatpaks
 After=network-online.target
 Wants=network-online.target
 ConditionPathExists=/usr/bin/flatpak
-ConditionPathExists=!/var/lib/zirconium/preinstall-finished
+ConditionPathExists=!/var/lib/astral/preinstall-finished
 Documentation=man:flatpak-preinstall(1)
 
 [Service]
 Type=oneshot
-ExecStart=mkdir -p /var/lib/zirconium
+ExecStart=mkdir -p /var/lib/astral
 ExecStart=/usr/bin/flatpak preinstall -y
-ExecStart=touch /var/lib/zirconium/preinstall-finished
+ExecStart=touch /var/lib/astral/preinstall-finished
 RemainAfterExit=true
 Restart=on-failure
 RestartSec=30

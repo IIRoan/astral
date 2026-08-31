@@ -1,11 +1,11 @@
 [Unit]
 Description=Initializes Chezmoi if directory is missing
-ConditionPathExists=!%h/.config/zirconium/chezmoi
+ConditionPathExists=!%h/.config/astral/chezmoi
 
 [Service]
-ExecStart=mkdir -p %h/.config/zirconium/chezmoi
-ExecStart=touch %h/.config/zirconium/chezmoi/chezmoi.toml
-ExecStart=chezmoi apply -S /usr/share/zirconium/zdots --config %h/.config/zirconium/chezmoi/chezmoi.toml
+ExecStart=mkdir -p %h/.config/astral/chezmoi
+ExecStart=touch %h/.config/astral/chezmoi/chezmoi.toml
+ExecStart=chezmoi apply -S /usr/share/astral/dotfiles --config %h/.config/astral/chezmoi/chezmoi.toml
 Type=oneshot
 
 [Install]

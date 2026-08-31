@@ -1,49 +1,88 @@
-# Zirconium
-***Do you like how I dance? I've got Zirconium pants!***
+# Astral
 
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/73e4e017-893b-46fc-b6ce-351c176d444c" />
+<img src="assets/logos/logo-astral.svg" width="180" alt="Astral logo" />
 
-## What is Zirconium?
-Zirconium is an opinionated fedora-bootc image that makes use of Niri and DankMaterialShell to create a usable out of the box TWM experience.
+Astral is an opinionated Fedora bootc desktop built around Niri and Noctalia. It
+keeps Zirconium's container-focused image foundation while giving the desktop,
+developer tooling, image names, defaults, and release pipeline an independent
+Astral identity.
 
-Zirconium is built primarily for container-focused development and day-to-day usage, however gaming is still more than possible. For a fully gaming-focused experience, use Bazzite.
+## Included
 
-## How do I use this?
-The best way to install Zirconium is to download our ISOs! Pick your flavor:
+- Niri with Noctalia v5 and Noctalia Greeter.
+- Rootless Podman with Docker CLI compatibility.
+- `docker compose` backed by `podman-compose`, with the Podman user socket
+  enabled for Docker API-compatible tools.
+- Visual Studio Code from Microsoft's official RPM repository.
+- Integrated wallpapers, logos, and default dotfiles. This repository has no
+  asset or dotfile submodules.
+- AMD/Intel and NVIDIA bootc image workflows for AMD64 and ARM64.
 
-- AMD64
-  - **[AMD/Intel GPUs](https://isos.zirconium.gay/zirconium-isos/zirconium-amd64.iso)** ([Checksum](https://isos.zirconium.gay/zirconium-isos/zirconium-amd64.iso-CHECKSUM))
-  - **[NVIDIA GPUs (GTX 16xx and RTX series)](https://isos.zirconium.gay/zirconium-isos/zirconium-nvidia-amd64.iso)** ([Checksum](https://isos.zirconium.gay/zirconium-isos/zirconium-nvidia-amd64.iso-CHECKSUM))
-- ARM64
-  - **[AMD/Intel GPUs](https://isos.zirconium.gay/zirconium-isos/zirconium-arm64.iso)** ([Checksum](https://isos.zirconium.gay/zirconium-isos/zirconium-arm64.iso-CHECKSUM))
-  - **[NVIDIA GPUs (GTX 16xx and RTX series)](https://isos.zirconium.gay/zirconium-isos/zirconium-nvidia-arm64.iso)** ([Checksum](https://isos.zirconium.gay/zirconium-isos/zirconium-nvidia-arm64.iso-CHECKSUM))
+## Install
 
-Alternatively, you can install Zirconium by doing a rebase from an existing Fedora Atomic install. We recommend [Bluefin](https://projectbluefin.io/), but it doesn't really matter.
+Rebase an existing Fedora Atomic installation to the standard image:
 
-Once you have some flavour of Fedora Atomic installed, run this command:
-
-```
-sudo bootc switch ghcr.io/zirconium-dev/zirconium:latest
-```
-
-If you also have NVIDIA GPU (GTX 16xx or RTX series), run this command instead:
-
-```
-sudo bootc switch ghcr.io/zirconium-dev/zirconium-nvidia:latest
+```bash
+sudo bootc switch ghcr.io/iiroan/astral:latest
 ```
 
-[Join our Discord](https://discord.gg/mmgNQpxwhW)!
+For supported NVIDIA GPUs, use:
 
-## Notice about Nvidia GPUs
+```bash
+sudo bootc switch ghcr.io/iiroan/astral-nvidia:latest
+```
 
-Currently the Nvidia kernel module is not being signed so there is no way of using secure boot on the `-nvidia` images. ([related issue](https://github.com/zirconium-dev/zirconium/issues/108))
+The image must be published and signed by the repository workflows before these
+commands can be used. The NVIDIA kernel module is not signed, so Secure Boot is
+not supported by the NVIDIA image.
 
-## Can I still customize Niri/DankMaterialShell?
-Yes! Put your Niri customizations in `~/.config/niri/local.kdl` (for your user) or `/etc/niri/local.kdl` (for system-wide customizations).
+## Desktop Defaults
 
-We update our dotfiles in OS updates, which will overwrite the default `~/.config/niri/config.kdl` file. If you edit it, it might get overwritten in a future update. 
+Astral starts Noctalia directly from Niri and reserves these shortcuts:
 
-## Zirconium is a stupid name. Why did you pick Zirconium?
-A weird wax baby made me.
+| Shortcut | Action |
+| --- | --- |
+| `Mod+Space` | Noctalia launcher |
+| `Mod+S` | Control center |
+| `Mod+Ctrl+Comma` | Noctalia settings |
+| `Mod+Alt+L` | Lock session |
+| `Alt+Tab` | Noctalia window switcher |
+| `Mod+T` | Terminal |
+| `Mod+E` | File manager |
 
-[![Tally Hall - Ruler of Everything](https://img.youtube.com/vi/I8sUC-dsW8A/0.jpg)](https://www.youtube.com/watch?v=I8sUC-dsW8A)
+Put personal Niri overrides in `~/.config/niri/local.kdl` or system-wide
+overrides in `/etc/niri/local.kdl`. Curated Noctalia defaults live in
+`~/.config/noctalia/config.toml`; GUI changes are stored separately by
+Noctalia under `~/.local/state/noctalia/`.
+
+## Containers
+
+Both command styles use Podman:
+
+```bash
+podman compose up
+docker compose up
+```
+
+Astral installs `podman-docker` and `podman-compose`, selects
+`/usr/bin/podman-compose` as Podman's Compose provider, enables
+`podman.socket` for each user, and exports the rootless socket through
+`DOCKER_HOST`.
+
+## Build
+
+Install `mkosi`, `just`, and Podman, then build the standard bootc image:
+
+```bash
+just build
+```
+
+The GitHub Actions workflows publish multi-architecture images to GHCR on pushes
+to the default branch.
+
+## Upstream And Licensing
+
+Astral is derived from
+[Zirconium](https://github.com/zirconium-dev/zirconium). The main project
+remains under the AGPL-3.0-or-later license. Vendored assets and dotfiles retain their
+Apache-2.0 license files and upstream history attribution.

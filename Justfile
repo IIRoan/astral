@@ -1,5 +1,5 @@
-image := env("IMAGE_FULL", "localhost/zirconium:latest")
-image_name := "zirconium"
+image := env("IMAGE_FULL", "localhost/astral:latest")
+image_name := "astral"
 filesystem := env("BUILD_FILESYSTEM", "btrfs")
 
 iterate-sysupdate $IMAGE_NAME=image_name:
@@ -23,7 +23,7 @@ iterate-bootc:
 build: build-ostree
 
 build-ostree:
-    mkosi -B --debug-shell --profile=base,base-desktop,bootc-ostree,brew,zirconium-bootc-ostree
+    mkosi -B --debug-shell --profile=base,base-desktop,bootc-ostree,brew,astral-bootc-ostree
 
 build-sysupdate:
     mkosi -B --debug-shell --profile=base,base-desktop,sysupdate,brew,base
@@ -37,7 +37,7 @@ lint:
 load:
     #!/usr/bin/env bash
     set -x
-    podman load -i "$(find mkosi.output/* -maxdepth 0 -type d -printf "%T@ ,%p\n" -iname "_*" -print0 | sort -n | head -n1 | cut -d, -f2)" -q | cut -d: -f3 | xargs -I{} podman tag {} {{image}}
+    podman load -i "$(find mkosi.output/* -maxdepth 0 -type d -printf "%T@ ,%p\n" -iname "_*" -print0 | sort -n | head -n1 | cut -d, -f2)" -q | cut -d: -f3 | xargs -I{} podman tag {} {{ image }}
 
 bootc *ARGS:
     podman run \
@@ -49,7 +49,7 @@ bootc *ARGS:
         -v /dev:/dev \
         -v "${BUILD_BASE_DIR:-.}:/data" \
         --security-opt label=type:unconfined_t \
-        "{{image}}" bootc {{ARGS}}
+        "{{ image }}" bootc {{ ARGS }}
 
 disk-image $filesystem=filesystem:
     #!/usr/bin/env bash
@@ -63,7 +63,7 @@ rechunk $image_name=image:
     set -xeuo pipefail
 
     # FIXME: Bandaid fix for
-    # https://github.com/zirconium-dev/zirconium/issues/363
+    # Upstream context: https://github.com/zirconium-dev/zirconium/issues/363
     # Do this properly in mkosi at some point
     DATE="$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)"
 

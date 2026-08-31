@@ -1,0 +1,12 @@
+enable chezmoi-init.service
+enable chezmoi-update.timer
+enable fcitx5.service
+enable foot-server.service
+enable foot-server.socket
+enable gcr-ssh-agent.service
+enable gcr-ssh-agent.socket
+enable gnome-keyring-daemon.service
+enable gnome-keyring-daemon.socket
+enable iio-niri.service
+enable podman.socket
+enable udiskie.service

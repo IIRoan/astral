@@ -1,0 +1,18 @@
+config-notification {
+    disable-failed
+}
+
+debug {
+   honor-xdg-activation-with-invalid-serial
+}
+
+layer-rule {
+    match namespace="^noctalia-overview.*"
+    place-within-backdrop true
+}
+
+switch-events {
+    lid-close { spawn "noctalia" "msg" "session" "lock"; }
+}
+
+spawn-at-startup "noctalia"

@@ -1,7 +1,7 @@
 [Unit]
 Description=Timer for Chezmoi Update
 # This service will only execute for a user with an existing chezmoi directory
-ConditionPathExists=%h/.config/zirconium/chezmoi
+ConditionPathExists=%h/.config/astral/chezmoi
 
 [Timer]
 OnBootSec=5m

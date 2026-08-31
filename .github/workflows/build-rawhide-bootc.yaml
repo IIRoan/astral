@@ -1,4 +1,4 @@
-name: Build Zirconium Rawhide
+name: Build Astral Rawhide
 
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
     uses: ./.github/workflows/reusable-build-bootc.yaml
     secrets: inherit
     with:
-      image-name: zirconium
+      image-name: astral
       platforms: amd64,arm64
       default-tag: rawhide
       release: rawhide

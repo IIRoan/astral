@@ -4,5 +4,5 @@ set -xeuo pipefail
 
 mkdir -p "${SRCDIR}/cache"
 pushd "${SRCDIR}/cache"
-skopeo copy docker://ghcr.io/zirconium-dev/zirconium:latest "oci://${SRCDIR}/cache/zirconium-oci"
+skopeo copy docker://ghcr.io/iiroan/astral:latest "oci://${SRCDIR}/cache/astral-oci"
 popd

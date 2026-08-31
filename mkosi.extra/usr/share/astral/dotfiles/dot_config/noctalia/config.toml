@@ -1,0 +1,7 @@
+# Astral keeps this layer intentionally small so Noctalia's current defaults
+# continue to improve without pinning every setting in the image.
+[theme]
+mode = "dark"
+
+[bar.default]
+position = "top"

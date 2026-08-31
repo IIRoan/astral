@@ -28,8 +28,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          submodules: true
 
       - name: Build ISO
         id: build-iso
@@ -71,7 +69,7 @@ jobs:
           IMAGE_NAME: "${{ github.event.repository.name }}"
           SOURCE_DIR: ${{ steps.build-iso.outputs.output-directory }}
         run: |
-          sudo mv "${SOURCE_DIR}"/*/*.iso "${SOURCE_DIR}/zirc-unbranded.iso"
+          sudo mv "${SOURCE_DIR}"/*/*.iso "${SOURCE_DIR}/astral-unbranded.iso"
           sudo podman rmi -a -f
           podman rmi -a -f
           sudo podman run \
@@ -88,13 +86,13 @@ jobs:
             && cd /iso/product && find . | cpio -c -o | gzip -9cv > /images/product.img && cd / \
             && mkksiso \
                 --add /images \
-                --volid zirconium-boot \
+                --volid astral-boot \
                 --replace "vmlinuz" "vmlinuz inst.resolution=1280x800" \
-                /output/zirc-unbranded.iso \
-                /output/zirc.iso'
-          sudo mv "${SOURCE_DIR}"/zirc.iso "${SOURCE_DIR}/${IMAGE_NAME}${FLAVOR}-${PLATFORM}.iso"
+                /output/astral-unbranded.iso \
+                /output/astral.iso'
+          sudo mv "${SOURCE_DIR}"/astral.iso "${SOURCE_DIR}/${IMAGE_NAME}${FLAVOR}-${PLATFORM}.iso"
           (cd ${SOURCE_DIR} && sha256sum "${IMAGE_NAME}${FLAVOR}-${PLATFORM}.iso" | sudo tee "${IMAGE_NAME}${FLAVOR}-${PLATFORM}.iso-CHECKSUM")
-          sudo rm -f "${SOURCE_DIR}/zirc-unbranded.iso"
+          sudo rm -f "${SOURCE_DIR}/astral-unbranded.iso"
 
       - name: Upload to S3
         if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
