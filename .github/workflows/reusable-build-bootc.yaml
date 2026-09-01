@@ -355,7 +355,7 @@ jobs:
         with:
           subject-name: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.publish.outputs.digest }}
-          push-to-registry: true
+          push-to-registry: false
           create-storage-record: false
 
   verify:
