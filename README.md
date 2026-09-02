@@ -38,7 +38,7 @@ Astral starts Noctalia directly from Niri and reserves these shortcuts:
 | `Mod+Space` | Noctalia launcher |
 | `Mod+S` | Control center |
 | `Mod+Ctrl+Comma` | Noctalia settings |
-| `Mod+Alt+L` | Lock session |
+| `Mod+L` | Lock session |
 | `Alt+Tab` | Noctalia window switcher |
 | `Mod+T` | Terminal |
 | `Mod+E` | File manager |

@@ -1,0 +1,8 @@
+polkit.addRule(function(action, subject) {
+    if (action.id !== "org.noctalia.greeter.apply-appearance") {
+        return;
+    }
+    if (subject.isInGroup("wheel") && subject.local) {
+        return polkit.Result.YES;
+    }
+});

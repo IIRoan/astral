@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Wait until Noctalia's IPC is up, then push wallpaper/palette/font to greetd.
+# auto_sync only fires on later setting changes, so first login needs this.
+if ! command -v noctalia >/dev/null 2>&1; then
+  exit 0
+fi
+
+for _ in $(seq 1 45); do
+  if noctalia msg greeter-sync >/dev/null 2>&1; then
+    exit 0
+  fi
+  sleep 1
+done
+
+exit 0

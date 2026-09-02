@@ -2,6 +2,29 @@
 # continue to improve without pinning every setting in the image.
 [theme]
 mode = "dark"
+source = "wallpaper"
 
 [bar.default]
 position = "top"
+
+[shell]
+# Native prompts for greeter sync and other pkexec actions.
+polkit_agent = true
+password_style = "default"
+
+[shell.greeter_sync]
+auto_sync = true
+
+[lockscreen]
+enabled = true
+lock_before_suspend = true
+# Capture the live desktop (niri screencopy) instead of a flat wallpaper card.
+blurred_desktop = true
+blur_intensity = 0.55
+tint_intensity = 0.12
+
+[wallpaper]
+directory = "/usr/share/astral/skel/Pictures/Wallpapers"
+
+[wallpaper.default]
+path = "/usr/share/astral/skel/Pictures/Wallpapers/mountains.png"

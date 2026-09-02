@@ -1,0 +1,15 @@
+# Admin greeter config. Sync never overwrites this file; keys set here win.
+# Do not pin [appearance.palette] or wallpaper paths — those come from
+# Noctalia Shell via sync.toml after first login.
+[session]
+default = "niri"
+
+[appearance]
+scheme = "Synced"
+password_style = "default"
+hide_logo = true
+scheme_selector_position = "hidden"
+theme_mode = "dark"
+
+[idle]
+timeout = 300

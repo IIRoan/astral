@@ -1,3 +1,4 @@
+enable astral-sync-noctalia-greeter.service
 enable chezmoi-init.service
 enable chezmoi-update.timer
 enable fcitx5.service

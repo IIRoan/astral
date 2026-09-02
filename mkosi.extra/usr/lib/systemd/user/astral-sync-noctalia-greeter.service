@@ -1,0 +1,13 @@
+[Unit]
+Description=Sync Noctalia appearance to the login greeter
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionExecutable=/usr/bin/noctalia
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/astral/sync-noctalia-greeter
+TimeoutStartSec=90
+
+[Install]
+WantedBy=graphical-session.target

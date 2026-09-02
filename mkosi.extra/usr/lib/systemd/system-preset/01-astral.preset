@@ -5,6 +5,7 @@ enable auditd.service
 enable firewalld.service
 enable flatpak-add-flathub-repos.service
 enable flatpak-preinstall.service
+enable accounts-daemon.service
 enable greetd.service
 enable ntpd-rs.service
 enable systemd-resolved.service
