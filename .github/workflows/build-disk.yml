@@ -30,8 +30,6 @@ jobs:
           sudo podman pull "${TARGET_IMAGE}"
           sudo mkdir -p rpm-gpg output
           sudo podman run --rm -it -v ./rpm-gpg:/out:Z "${TARGET_IMAGE}" bash -c 'cp /etc/pki/rpm-gpg/* /out'
-          # bootc-image-builder keys off os-release ID, not ID_LIKE. Current
-          # images still advertise ID=astral, so map that onto Fedora's defs.
           sudo podman run \
             --rm \
             --privileged \
@@ -49,17 +47,12 @@ jobs:
               for d in /usr/share/bootc-image-builder/defs /usr/share/image-builder/defs; do
                 if [ -d "$d" ]; then DEFS="$d"; break; fi
               done
-              if [ -z "$DEFS" ]; then
-                echo "Could not find bootc-image-builder distro defs" >&2
-                exit 1
-              fi
+              [ -n "$DEFS" ] || exit 1
               FEDORA_DEF=$(ls -1 "$DEFS"/fedora-*.yaml | sort -V | tail -n1)
-              echo "Mapping astral distro defs to $(basename "$FEDORA_DEF")"
               for f in "$DEFS"/fedora-*.yaml; do
                 ln -sfn "$(basename "$f")" "$DEFS/$(basename "$f" | sed "s/^fedora-/astral-/")"
               done
               ln -sfn "$(basename "$FEDORA_DEF")" "$DEFS/astral-44.yaml"
-              ls -l "$DEFS"/astral-*.yaml "$FEDORA_DEF"
               exec /usr/bin/bootc-image-builder --type iso --rootfs btrfs --use-librepo=True "$TARGET_IMAGE"'
           echo "output-directory=$(realpath ./output)" >> $GITHUB_OUTPUT
 
