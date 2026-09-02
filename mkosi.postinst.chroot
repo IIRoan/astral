@@ -22,15 +22,12 @@ command -v setterm
 command -v pkexec
 stat /usr/lib/bootc/kargs.d/10-quiet-console.toml
 grep -Fq '"quiet"' /usr/lib/bootc/kargs.d/10-quiet-console.toml
-if grep -Eq 'rhgb|plymouth' /usr/lib/bootc/kargs.d/10-quiet-console.toml; then
+if grep -E '^\s*("[^"]+"\s*,?\s*)+$' /usr/lib/bootc/kargs.d/10-quiet-console.toml | grep -Eq 'rhgb|"splash"'; then
     exit 1
 fi
 grep -Fq 'kernel.printk = 3 3 3 3' /usr/lib/sysctl.d/20-astral-quiet-printk.conf
-if rpm -q plymouth >/dev/null 2>&1; then
-    # Plymouth may exist via recommends elsewhere; Astral must not force a splash theme.
-    if [ -f /etc/plymouth/plymouthd.conf ] && grep -Eq '^Theme=spinner$' /etc/plymouth/plymouthd.conf; then
-        exit 1
-    fi
+if [ -f /etc/plymouth/plymouthd.conf ] && grep -Eq '^Theme=spinner$' /etc/plymouth/plymouthd.conf; then
+    exit 1
 fi
 
 install -d /usr/share/astral/

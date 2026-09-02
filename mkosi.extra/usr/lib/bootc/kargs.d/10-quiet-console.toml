@@ -1,6 +1,5 @@
-# Silence console spam that blanks the firmware logo (deferred takeover) and
-# flashes text between boot and the noctalia greeter. Intentionally no rhgb /
-# Plymouth splash — keep the OEM/hardware logo until the greeter takes over.
+# Keep firmware logo (deferred takeover). Do not enable a graphical boot splash.
+# Only reduce console noise so tty1 does not flash text before the greeter.
 kargs = [
     "quiet",
     "loglevel=3",
