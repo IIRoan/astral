@@ -6,5 +6,5 @@ service = "greetd-spawn"
 vt = 1
 
 [default_session]
-command = "/usr/bin/noctalia-greeter-session -- --session niri"
+command = "env NOCTALIA_GREETER_BIN=/usr/libexec/astral/noctalia-greeter-guard /usr/bin/noctalia-greeter-session -- --session Niri"
 user = "greeter"

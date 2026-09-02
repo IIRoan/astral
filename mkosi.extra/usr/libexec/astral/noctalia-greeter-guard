@@ -1,0 +1,23 @@
+#!/usr/bin/sh
+set -eu
+
+GREETER=/usr/bin/noctalia-greeter
+EXPECTED_SESSION=Niri
+MAX_ATTEMPTS=10
+
+attempt=1
+while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
+    sessions="$(${GREETER} sessions 2>&1 || true)"
+    if printf '%s\n' "${sessions}" | grep -Fxiq "${EXPECTED_SESSION}"; then
+        exec "${GREETER}" "$@"
+    fi
+
+    logger -t astral-greeter-guard \
+        "Niri session unavailable (attempt ${attempt}/${MAX_ATTEMPTS}); refusing shell fallback: ${sessions}"
+    attempt=$((attempt + 1))
+    sleep 1
+done
+
+logger -t astral-greeter-guard \
+    "Niri session remained unavailable; exiting so greetd can restart the graphical greeter"
+exit 1
