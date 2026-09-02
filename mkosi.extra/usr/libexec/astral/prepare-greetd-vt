@@ -10,14 +10,10 @@ fi
 
 case "${1:-}" in
     hide)
-        # Blank the VT and hide the cursor so no leftover boot text flashes
-        # before noctalia-greeter paints.
-        setterm --clear all --cursor off --blank force >"${tty}" 2>/dev/null || true
-        printf '\033[2J\033[H\033[?25l' >"${tty}" 2>/dev/null || true
+        setterm --clear all --cursor off >"${tty}" 2>/dev/null || true
         ;;
     show)
         setterm --cursor on >"${tty}" 2>/dev/null || true
-        printf '\033[?25h' >"${tty}" 2>/dev/null || true
         ;;
     *)
         echo "usage: $0 hide|show" >&2

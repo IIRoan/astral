@@ -1,9 +1,0 @@
-# Keep firmware logo (deferred takeover). Do not enable a graphical boot splash.
-# Only reduce console noise so tty1 does not flash text before the greeter.
-kargs = [
-    "quiet",
-    "loglevel=3",
-    "systemd.show_status=auto",
-    "rd.udev.log_level=3",
-    "vt.global_cursor_default=0",
-]
