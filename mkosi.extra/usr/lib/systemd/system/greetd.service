@@ -1,6 +1,7 @@
 [Unit]
 Description=Greeter daemon
-# Keep Plymouth alive until the greeter claims DRM (do not wait for quit-wait).
+# Do not After=plymouth-quit-wait.service: that waits for plymouthd to exit, but
+# we Conflict with plymouth-quit and keep the splash until the greeter takes DRM.
 After=systemd-user-sessions.service
 After=getty@tty1.service
 After=plymouth-quit.service
