@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# First Astral login: install niri/Noctalia entrypoints even when ~/.config
+# already exists from another image, then apply the remaining chezmoi source.
+# A successful run leaves ~/.config/astral/chezmoi/applied so we do not repeat.
+
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+CHEZMOI_DIR="${CONFIG_HOME}/astral/chezmoi"
+STAMP="${CHEZMOI_DIR}/applied"
+DOTFILES="/usr/share/astral/dotfiles"
+NIRI_MARKER="/usr/share/astral/dotfiles/system/niri/astral.kdl"
+NIRI_SRC="${DOTFILES}/dot_config/niri/config.kdl"
+NIRI_DST="${CONFIG_HOME}/niri/config.kdl"
+NOCTALIA_SRC="${DOTFILES}/dot_config/noctalia/config.toml"
+NOCTALIA_DST="${CONFIG_HOME}/noctalia/config.toml"
+ASTRAL_WALLPAPER_DIR="/usr/share/astral/skel/Pictures/Wallpapers"
+
+backup_existing() {
+    local src="$1"
+    local dest="$2"
+    if [[ ! -e "${src}" ]]; then
+        return 0
+    fi
+    if [[ -e "${dest}" ]]; then
+        dest="${src}.pre-astral.$(date +%s)"
+    fi
+    mv "${src}" "${dest}"
+}
+
+mkdir -p "${CHEZMOI_DIR}" "${CONFIG_HOME}/niri" "${CONFIG_HOME}/noctalia"
+[[ -f "${CHEZMOI_DIR}/chezmoi.toml" ]] || touch "${CHEZMOI_DIR}/chezmoi.toml"
+
+if [[ ! -f "${NIRI_SRC}" ]]; then
+    echo "chezmoi-init: missing ${NIRI_SRC}" >&2
+    exit 1
+fi
+
+if [[ ! -f "${NIRI_DST}" ]] || ! grep -Fq "${NIRI_MARKER}" "${NIRI_DST}"; then
+    if [[ -e "${NIRI_DST}" ]]; then
+        backup_existing "${NIRI_DST}" "${CONFIG_HOME}/niri/config.kdl.pre-astral"
+    fi
+    install -m 0644 "${NIRI_SRC}" "${NIRI_DST}"
+fi
+
+if [[ -f "${NOCTALIA_SRC}" ]]; then
+    if [[ ! -f "${NOCTALIA_DST}" ]] || ! grep -Fq "${ASTRAL_WALLPAPER_DIR}" "${NOCTALIA_DST}"; then
+        if [[ -e "${NOCTALIA_DST}" ]]; then
+            backup_existing "${NOCTALIA_DST}" "${CONFIG_HOME}/noctalia/config.toml.pre-astral"
+        fi
+        install -m 0644 "${NOCTALIA_SRC}" "${NOCTALIA_DST}"
+    fi
+fi
+
+set +e
+set +o pipefail
+yes s | chezmoi apply --no-tty --keep-going \
+    -S "${DOTFILES}" \
+    --config "${CHEZMOI_DIR}/chezmoi.toml"
+chezmoi_status="${PIPESTATUS[1]}"
+set -euo pipefail
+
+if [[ "${chezmoi_status}" -ne 0 ]]; then
+    echo "chezmoi-init: chezmoi apply exited ${chezmoi_status}" >&2
+    exit "${chezmoi_status}"
+fi
+
+touch "${STAMP}"

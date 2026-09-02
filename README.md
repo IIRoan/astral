@@ -14,6 +14,8 @@ Astral identity.
 - `docker compose` backed by `podman-compose`, with the Podman user socket
   enabled for Docker API-compatible tools.
 - Visual Studio Code from Microsoft's official RPM repository.
+- Virtual Machine Manager with a system QEMU/KVM backend and default NAT
+  networking.
 - Integrated wallpapers, logos, and default dotfiles. This repository has no
   asset or dotfile submodules.
 - A stable Fedora 44 bootc image for AMD64 and ARM64.

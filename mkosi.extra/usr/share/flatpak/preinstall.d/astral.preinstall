@@ -5,3 +5,7 @@ IsRuntime=false
 [Flatpak Preinstall io.github.kolunmi.Bazaar]
 Branch=stable
 IsRuntime=false
+
+[Flatpak Preinstall org.virt_manager.virt-manager]
+Branch=stable
+IsRuntime=false

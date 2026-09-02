@@ -1,12 +1,10 @@
 [Unit]
-Description=Initializes Chezmoi if directory is missing
-ConditionPathExists=!%h/.config/astral/chezmoi
+Description=Initializes Astral desktop defaults with Chezmoi
+ConditionPathExists=!%h/.config/astral/chezmoi/applied
 
 [Service]
-ExecStart=mkdir -p %h/.config/astral/chezmoi
-ExecStart=touch %h/.config/astral/chezmoi/chezmoi.toml
-ExecStart=chezmoi apply -S /usr/share/astral/dotfiles --config %h/.config/astral/chezmoi/chezmoi.toml
 Type=oneshot
+ExecStart=/usr/libexec/astral/chezmoi-init
 
 [Install]
 WantedBy=graphical-session-pre.target

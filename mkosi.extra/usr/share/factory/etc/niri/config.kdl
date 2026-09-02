@@ -1,0 +1,3 @@
+// Astral system default. ~/.config/niri/config.kdl takes precedence when present.
+// Personal overrides: ~/.config/niri/local.kdl or /etc/niri/local.kdl
+include "/usr/share/astral/dotfiles/system/niri/astral.kdl"
