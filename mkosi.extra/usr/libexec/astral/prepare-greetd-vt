@@ -4,32 +4,19 @@ set -eu
 tty=/dev/tty1
 export TERM=linux
 
-plymouth_cmd() {
-    if command -v plymouth >/dev/null 2>&1; then
-        plymouth "$@" >/dev/null 2>&1 || true
-    fi
-}
+if [ ! -c "${tty}" ]; then
+    exit 0
+fi
 
 case "${1:-}" in
     hide)
-        # Clear leftover console text, then release DRM for the greeter compositor.
-        if [ -c "${tty}" ]; then
-            setterm --clear all --cursor off >"${tty}" 2>/dev/null || true
-        fi
-        plymouth_cmd deactivate
-        ;;
-    retain)
-        # Keep the last splash frame until noctalia-greeter paints over it.
-        sleep 1
-        plymouth_cmd quit --retain-splash
+        setterm --clear all --cursor off >"${tty}" 2>/dev/null || true
         ;;
     show)
-        if [ -c "${tty}" ]; then
-            setterm --cursor on >"${tty}" 2>/dev/null || true
-        fi
+        setterm --cursor on >"${tty}" 2>/dev/null || true
         ;;
     *)
-        echo "usage: $0 hide|retain|show" >&2
+        echo "usage: $0 hide|show" >&2
         exit 2
         ;;
 esac
