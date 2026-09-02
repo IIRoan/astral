@@ -7,6 +7,7 @@ niri --version | grep -i -E "niri [[:digit:]]*\.[[:digit:]]*"
 niri validate --config /usr/share/factory/etc/niri/config.kdl
 noctalia-greeter sessions | grep -Fqx Niri
 stat /usr/libexec/astral/noctalia-greeter-guard
+grep -Fx 'L+ /etc/greetd/config.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 
 install -d /usr/share/astral/
 sed --sandbox -i -e '/gnome_keyring.so/ s/-auth/auth/ ; /gnome_keyring.so/ s/-session/session/' /etc/pam.d/greetd
