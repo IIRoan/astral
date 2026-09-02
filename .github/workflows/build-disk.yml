@@ -36,7 +36,7 @@ jobs:
             --pull=newer \
             --security-opt label=type:unconfined_t \
             --entrypoint /bin/sh \
-            -e TARGET_IMAGE \
+            -e TARGET_IMAGE="${TARGET_IMAGE}" \
             -v "${TARGET_CONFIG}:/config.toml:ro" \
             -v ./output/:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
