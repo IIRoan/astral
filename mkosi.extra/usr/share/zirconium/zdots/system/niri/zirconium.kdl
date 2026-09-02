@@ -1,0 +1,4 @@
+// Compatibility entrypoint for existing Zirconium user configurations.
+// Astral's first-login migration replaces those configurations, but keeping
+// this path valid prevents a failed desktop session if migration is delayed.
+include "/usr/share/astral/dotfiles/system/niri/astral.kdl"

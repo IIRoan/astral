@@ -4,6 +4,7 @@ set -xeuo pipefail
 install -Dpm0644 -t /usr/share/flatpak/remotes.d/ "$SRCDIR/cache/flathub.flatpakrepo"
 
 niri --version | grep -i -E "niri [[:digit:]]*\.[[:digit:]]*"
+niri validate --config /usr/share/factory/etc/niri/config.kdl
 
 install -d /usr/share/astral/
 sed --sandbox -i -e '/gnome_keyring.so/ s/-auth/auth/ ; /gnome_keyring.so/ s/-session/session/' /etc/pam.d/greetd
@@ -19,6 +20,7 @@ grep -F -e "Comment=Central repository of Flatpak applications" /usr/share/flatp
 stat /usr/share/flatpak/remotes.d/flathub.flatpakrepo
 stat /usr/bin/luks*tpm*
 stat /usr/share/astral/just/00-start.just
+stat /usr/share/zirconium/zdots/system/niri/zirconium.kdl
 # Not yet, needs a lot of fixes for sysupdate version
 # stat /usr/bin/taidan
 # stat /usr/lib/systemd/system/taidan*.service

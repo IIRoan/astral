@@ -16,6 +16,12 @@ NOCTALIA_SRC="${DOTFILES}/dot_config/noctalia/config.toml"
 NOCTALIA_DST="${CONFIG_HOME}/noctalia/config.toml"
 ASTRAL_WALLPAPER_DIR="/usr/share/astral/skel/Pictures/Wallpapers"
 
+# This script is also called directly from niri.service as a rebase-safe
+# pre-start check. Avoid reapplying managed files after the initial migration.
+if [[ -e "${STAMP}" ]]; then
+    exit 0
+fi
+
 backup_existing() {
     local src="$1"
     local dest="$2"
