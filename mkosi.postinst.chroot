@@ -10,7 +10,12 @@ stat /usr/libexec/astral/noctalia-greeter-guard
 grep -Fx 'L+ /etc/greetd/config.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 grep -Fx 'C+ /var/lib/noctalia-greeter/greeter.toml 0640 greeter greeter - /usr/share/astral/noctalia-greeter.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 grep -Fx 'ConditionFileIsExecutable=/usr/bin/noctalia' /usr/lib/systemd/user/astral-sync-noctalia-greeter.service
-grep -Fx 'ExecStartPre=/usr/libexec/astral/prepare-greetd-vt hide' /usr/lib/systemd/system/greetd.service.d/20-kmscon.conf
+grep -Fx 'ExecStartPre=/usr/libexec/astral/prepare-greetd-vt hide' /usr/lib/systemd/system/greetd.service
+grep -Fx 'ExecStartPost=/usr/libexec/astral/prepare-greetd-vt retain' /usr/lib/systemd/system/greetd.service
+grep -Fx 'Conflicts=plymouth-quit.service' /usr/lib/systemd/system/greetd.service
+if grep -Fq 'plymouth-quit-wait.service' /usr/lib/systemd/system/greetd.service; then
+    exit 1
+fi
 grep -Fq 'exec pkexec noctalia-greeter-apply-appearance' /usr/libexec/astral/sync-noctalia-greeter
 if grep -Fq 'theme_mode' /usr/share/astral/noctalia-greeter.toml; then
     exit 1
@@ -18,6 +23,13 @@ fi
 test -x /usr/libexec/astral/prepare-greetd-vt
 command -v setterm
 command -v pkexec
+command -v plymouth
+rpm -q plymouth plymouth-theme-spinner plymouth-system-theme
+grep -Fx 'Theme=spinner' /etc/plymouth/plymouthd.conf
+stat /usr/share/plymouth/themes/spinner/watermark.png
+stat /usr/lib/bootc/kargs.d/10-plymouth.toml
+grep -Fq '"rhgb"' /usr/lib/bootc/kargs.d/10-plymouth.toml
+grep -Fq 'kernel.printk = 3 3 3 3' /usr/lib/sysctl.d/20-astral-quiet-printk.conf
 
 install -d /usr/share/astral/
 sed --sandbox -i -e '/gnome_keyring.so/ s/-auth/auth/ ; /gnome_keyring.so/ s/-session/session/' /etc/pam.d/greetd
