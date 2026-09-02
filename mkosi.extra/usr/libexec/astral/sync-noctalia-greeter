@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Wait until Noctalia's IPC is up, then push wallpaper/palette/font to greetd.
-# auto_sync only fires on later setting changes, so first login needs this.
-if ! command -v noctalia >/dev/null 2>&1; then
+# Wait until Noctalia's IPC is up, then stage and apply the current wallpaper,
+# palette, font, and output layout. auto_sync only fires on later setting
+# changes, so first login needs this.
+if ! command -v noctalia >/dev/null 2>&1 ||
+    ! command -v noctalia-greeter-apply-appearance >/dev/null 2>&1 ||
+    ! command -v pkexec >/dev/null 2>&1; then
   exit 0
 fi
 
 for _ in $(seq 1 45); do
   if noctalia msg greeter-sync >/dev/null 2>&1; then
-    exit 0
+    staging_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/noctalia-greeter-sync"
+    if [[ -f "${staging_dir}/sync.toml" ]]; then
+      exec pkexec noctalia-greeter-apply-appearance "${staging_dir}"
+    fi
   fi
   sleep 1
 done

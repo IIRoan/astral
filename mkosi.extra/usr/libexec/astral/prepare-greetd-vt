@@ -1,0 +1,22 @@
+#!/usr/bin/sh
+set -eu
+
+tty=/dev/tty1
+export TERM=linux
+
+if [ ! -c "${tty}" ]; then
+    exit 0
+fi
+
+case "${1:-}" in
+    hide)
+        setterm --clear all --cursor off >"${tty}" 2>/dev/null || true
+        ;;
+    show)
+        setterm --cursor on >"${tty}" 2>/dev/null || true
+        ;;
+    *)
+        echo "usage: $0 hide|show" >&2
+        exit 2
+        ;;
+esac

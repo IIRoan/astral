@@ -2,7 +2,7 @@
 Description=Sync Noctalia appearance to the login greeter
 PartOf=graphical-session.target
 After=graphical-session.target
-ConditionExecutable=/usr/bin/noctalia
+ConditionFileIsExecutable=/usr/bin/noctalia
 
 [Service]
 Type=oneshot

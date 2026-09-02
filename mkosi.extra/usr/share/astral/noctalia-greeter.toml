@@ -9,7 +9,6 @@ scheme = "Synced"
 password_style = "default"
 hide_logo = true
 scheme_selector_position = "hidden"
-theme_mode = "dark"
 
 [idle]
 timeout = 300
