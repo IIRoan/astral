@@ -33,8 +33,10 @@ ln -s fedora-release /usr/lib/system-release
 
     tee /usr/lib/os-release <<EOF
 NAME="${IMAGE_NAME^}"
-ID="${IMAGE_NAME}"
-ID_LIKE="$ID"
+ID="$ID"
+ID_LIKE="${ID_LIKE:-$ID}"
+VARIANT="${IMAGE_NAME^}"
+VARIANT_ID="${IMAGE_NAME}"
 PRETTY_NAME="${IMAGE_NAME^}"
 FANCY_NAME="\033[0;38:2:252:186:3;1;49m⸭\033[0;38:2:252:186:3;49m ${IMAGE_NAME^} \033[0m"
 VERSION="$VERSION"
