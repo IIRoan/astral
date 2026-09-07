@@ -8,19 +8,19 @@ bootc_enforce_sigpolicy = true
 [[bento]]
 title = "page-welcome"
 desc = "page-installation-welcome-desc"
-link = "https://projectbluefin.io"
+link = "https://github.com/IIRoan/astral"
 icon = "explore-symbolic"
 
 [[bento]]
 title = "page-installation-help"
 desc = "page-installation-help-desc"
-link = "https://universal-blue.discourse.group/c/bluefin/6"
+link = "https://github.com/IIRoan/astral/issues"
 icon = "chat-symbolic"
 
 [[bento]]
 title = "page-installation-contrib"
 desc = "page-installation-contrib-desc"
-link = "https://docs.projectbluefin.io"
+link = "https://github.com/IIRoan/astral#readme"
 icon = "applications-development-symbolic"
 
 [distro]

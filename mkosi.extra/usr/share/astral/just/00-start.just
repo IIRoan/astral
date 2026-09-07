@@ -29,7 +29,7 @@ status:
     else
         echo "Signature policy: not installed"
     fi
-    if systemctl is-enabled uupd.timer >/dev/null 2>&1; then
+    if systemctl is-enabled bootc-fetch-apply-updates.timer >/dev/null 2>&1; then
         echo "Automatic updates: enabled"
     else
         echo "Automatic updates: disabled"
@@ -238,15 +238,15 @@ update-greeter:
 toggle-updates ACTION="prompt":
     #!/usr/bin/bash
     ACTION="{{ ACTION }}"
-    CURRENT_STATE="$(systemctl is-enabled uupd.timer)"
+    CURRENT_STATE="$(systemctl is-enabled bootc-fetch-apply-updates.timer)"
 
     enable_updates() {
-        sudo systemctl enable uupd.timer
+        sudo systemctl enable --now bootc-fetch-apply-updates.timer
         echo "Updates have been enabled"
     }
 
     disable_updates() {
-        sudo systemctl disable uupd.timer
+        sudo systemctl disable --now bootc-fetch-apply-updates.timer
         echo "Updates have been disabled"
     }
 
