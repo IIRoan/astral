@@ -208,10 +208,21 @@ update-firmware:
 
     echo
     echo "=== Available firmware updates ==="
-    if ! fwupdmgr get-updates; then
-        echo "No firmware updates available."
-        exit 0
-    fi
+    # fwupdmgr: 0 = updates listed, 1 = error, 2 = nothing to do (success).
+    updates_rc=0
+    fwupdmgr get-updates || updates_rc=$?
+    case "${updates_rc}" in
+        0)
+            ;;
+        2)
+            echo "No firmware updates available."
+            exit 0
+            ;;
+        *)
+            echo "Failed to query firmware updates (exit ${updates_rc})." >&2
+            exit "${updates_rc}"
+            ;;
+    esac
 
     echo
     if ! gum confirm "Apply the firmware updates listed above?"; then

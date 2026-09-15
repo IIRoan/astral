@@ -21,7 +21,22 @@ fi
 # Metadata only — does not download or apply firmware payloads.
 fwupdmgr refresh >/dev/null 2>&1 || true
 
-json="$(fwupdmgr get-updates --json 2>/dev/null || true)"
+# fwupdmgr: 0 = updates listed, 1 = error, 2 = nothing to do (success).
+updates_rc=0
+json="$(fwupdmgr get-updates --json 2>/dev/null)" || updates_rc=$?
+case "${updates_rc}" in
+    0)
+        ;;
+    2)
+        rm -f "${STATE_FILE}"
+        exit 0
+        ;;
+    *)
+        echo "firmware-update-check: fwupdmgr get-updates failed (exit ${updates_rc})" >&2
+        exit 0
+        ;;
+esac
+
 json="${json#"${json%%\{*}"}"
 if [[ -z "${json}" || "${json}" != \{* ]]; then
     exit 0
