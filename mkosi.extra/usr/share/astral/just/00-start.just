@@ -91,14 +91,162 @@ check-update:
         exit 1
     fi
 
-# Simple wrapper over bootc/pompona for updating your system
+# Update the system image, Flatpaks, Distrobox containers, Homebrew, and global npm packages
 [group('System')]
 update:
     #!/usr/bin/env bash
-    if [[ -e "/sysroot/ostree" || -e "/sysroot/composefs" ]] ; then
-        pkexec bootc upgrade
+    set -euo pipefail
+
+    failures=0
+
+    run_step() {
+        local name="$1"
+        shift
+        echo
+        echo "=== ${name} ==="
+        if "$@"; then
+            echo "${name}: done"
+        else
+            echo "${name}: failed (continuing)" >&2
+            failures=$((failures + 1))
+        fi
+    }
+
+    update_system() {
+        if [[ -e /sysroot/ostree || -e /sysroot/composefs ]]; then
+            pkexec bootc upgrade
+        elif command -v pompona-update >/dev/null 2>&1; then
+            pompona-update
+        else
+            echo "No bootc or pompona update path available" >&2
+            return 1
+        fi
+    }
+
+    update_flatpak() {
+        if ! command -v flatpak >/dev/null 2>&1; then
+            echo "Flatpak is not installed; skipping"
+            return 0
+        fi
+        flatpak update -y
+    }
+
+    update_distrobox() {
+        if ! command -v distrobox >/dev/null 2>&1; then
+            echo "Distrobox is not installed; skipping"
+            return 0
+        fi
+        if ! distrobox list --no-color 2>/dev/null | awk 'NR > 1 && NF { found=1 } END { exit !found }'; then
+            echo "No Distrobox containers; skipping"
+            return 0
+        fi
+        distrobox upgrade --all
+    }
+
+    update_brew() {
+        local brew_bin=""
+        if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+            brew_bin="/home/linuxbrew/.linuxbrew/bin/brew"
+        elif command -v brew >/dev/null 2>&1; then
+            brew_bin="$(command -v brew)"
+        else
+            echo "Homebrew is not installed; skipping"
+            return 0
+        fi
+
+        # Ensure brew (and brew-provided tools like npm) are on PATH for this recipe.
+        eval "$("${brew_bin}" shellenv)"
+        brew update
+        brew upgrade
+    }
+
+    update_npm() {
+        # Prefer brew's environment when present so global npm matches the image tooling.
+        if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+        fi
+        if ! command -v npm >/dev/null 2>&1; then
+            echo "npm is not installed; skipping"
+            return 0
+        fi
+        npm update -g
+    }
+
+    run_step "System image" update_system
+    run_step "Flatpak" update_flatpak
+    run_step "Distrobox" update_distrobox
+    run_step "Homebrew" update_brew
+    run_step "npm (global)" update_npm
+
+    echo
+    if (( failures > 0 )); then
+        echo "Update finished with ${failures} failed step(s)." >&2
+        echo "Firmware is separate: run 'ajust update-firmware'."
+        exit 1
+    fi
+    echo "All update steps completed."
+    echo "Firmware is separate: run 'ajust update-firmware'."
+
+# Refresh firmware metadata and apply available fwupd updates
+[group('System')]
+update-firmware:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if ! command -v fwupdmgr >/dev/null 2>&1; then
+        echo "fwupd (fwupdmgr) is not installed" >&2
+        exit 1
+    fi
+
+    if ! gum confirm "Refresh firmware metadata and apply available updates?"; then
+        echo "Cancelled."
+        exit 0
+    fi
+
+    echo "=== Firmware metadata ==="
+    fwupdmgr refresh --force
+
+    echo
+    echo "=== Available firmware updates ==="
+    if ! fwupdmgr get-updates; then
+        echo "No firmware updates available."
+        exit 0
+    fi
+
+    echo
+    if ! gum confirm "Apply the firmware updates listed above?"; then
+        echo "Cancelled."
+        exit 0
+    fi
+
+    echo "=== Applying firmware updates ==="
+    fwupdmgr update --assume-yes
+    rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/astral/firmware-notify.json"
+
+    echo
+    if fwupdmgr check-reboot-needed >/dev/null 2>&1; then
+        echo "A reboot is required to finish firmware updates."
     else
-        pompona-update
+        echo "Firmware update step finished. Reboot if fwupd reported one is needed."
+    fi
+
+# Turn daily notify-only firmware checks on or off (never auto-applies updates)
+[group('System')]
+toggle-firmware-notifications:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if systemctl --user is-enabled --quiet astral-firmware-check.timer; then
+        if gum confirm --default=no "Disable daily firmware update notifications? (updates are never applied automatically)"; then
+            systemctl --user disable --now astral-firmware-check.timer
+            echo "Firmware update notifications disabled"
+        fi
+    else
+        if gum confirm "Enable daily firmware update notifications? (notify only — never auto-applies)"; then
+            systemctl --user enable --now astral-firmware-check.timer
+            echo "Firmware update notifications enabled (notify only)"
+            systemctl --user start astral-firmware-check.service || true
+        fi
     fi
 
 # Update unmodified dotfiles from the image

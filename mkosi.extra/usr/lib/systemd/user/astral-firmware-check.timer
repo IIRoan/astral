@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily notify-only firmware update check
+ConditionVirtualization=!container
+
+[Timer]
+OnBootSec=10m
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1h
+Unit=astral-firmware-check.service
+
+[Install]
+WantedBy=timers.target

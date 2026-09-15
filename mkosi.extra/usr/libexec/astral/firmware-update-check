@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Notify-only firmware check.
+# Never installs or applies firmware. Users must run `ajust update-firmware`.
+set -euo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/astral"
+STATE_FILE="${STATE_DIR}/firmware-notify.json"
+ICON="/usr/share/pixmaps/astral.svg"
+
+if ! command -v fwupdmgr >/dev/null 2>&1; then
+    exit 0
+fi
+if ! command -v notify-send >/dev/null 2>&1; then
+    exit 0
+fi
+if ! command -v jq >/dev/null 2>&1; then
+    echo "firmware-update-check: jq is required" >&2
+    exit 1
+fi
+
+# Metadata only — does not download or apply firmware payloads.
+fwupdmgr refresh >/dev/null 2>&1 || true
+
+json="$(fwupdmgr get-updates --json 2>/dev/null || true)"
+json="${json#"${json%%\{*}"}"
+if [[ -z "${json}" || "${json}" != \{* ]]; then
+    exit 0
+fi
+
+mapfile -t upgrades < <(
+    jq -r '
+        [.Devices[]? // empty
+         | . as $dev
+         | (.Releases // [])[]
+         | select((.Flags // []) | index("is-upgrade"))
+         | "\($dev.Name)\t\(.Version)\t\(.ReleaseId // .Version)\t\(.Urgency // "unknown")"]
+        | .[]
+    ' <<<"${json}"
+)
+
+if ((${#upgrades[@]} == 0)); then
+    rm -f "${STATE_FILE}"
+    exit 0
+fi
+
+release_ids="$(printf '%s\n' "${upgrades[@]}" | cut -f3 | sort -u | paste -sd, -)"
+previous_ids=""
+if [[ -f "${STATE_FILE}" ]]; then
+    previous_ids="$(jq -r '.release_ids // empty' "${STATE_FILE}" 2>/dev/null || true)"
+fi
+
+if [[ "${release_ids}" == "${previous_ids}" ]]; then
+    exit 0
+fi
+
+count="${#upgrades[@]}"
+body_lines=()
+urgency="normal"
+for row in "${upgrades[@]}"; do
+    IFS=$'\t' read -r name version _rid urg <<<"${row}"
+    body_lines+=("• ${name} → ${version}")
+    if [[ "${urg}" == "critical" || "${urg}" == "high" ]]; then
+        urgency="critical"
+    fi
+done
+
+summary="Firmware update available"
+if (( count > 1 )); then
+    summary="Firmware updates available (${count})"
+fi
+
+body="$(printf '%s\n' "${body_lines[@]}")"$'\n\n'"Not installed automatically."$'\n'"When ready: ajust update-firmware"
+
+notify_args=(-a Astral -u "${urgency}" -c device)
+if [[ -f "${ICON}" ]]; then
+    notify_args+=(-i "${ICON}")
+else
+    notify_args+=(-i firmware-manager)
+fi
+
+notify-send "${notify_args[@]}" "${summary}" "${body}"
+
+mkdir -p "${STATE_DIR}"
+jq -n \
+    --arg ids "${release_ids}" \
+    --argjson count "${count}" \
+    --arg checked "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{release_ids: $ids, count: $count, checked_at: $checked}' \
+    >"${STATE_FILE}"
