@@ -1,0 +1,47 @@
+#!/bin/bash
+# Create a disk-backed swapfile on first boot.
+#
+# zram alone cannot resolve memory pressure: it frees RAM by re-encoding pages
+# *inside* RAM rather than evicting them out of it. Once the zram pool fills,
+# reclaim has no backing store to drain to, so the kernel spins in direct
+# reclaim burning CPU on compression and the machine livelocks. A real swapfile
+# at a lower priority than zram gives reclaim somewhere to make forward progress.
+set -euo pipefail
+
+SWAPFILE=/var/swapfile
+MIN_GB=8
+MAX_GB=32
+
+if [[ -e $SWAPFILE ]]; then
+    echo "$SWAPFILE already exists, nothing to do"
+    exit 0
+fi
+
+# Size the swapfile to RAM, clamped to [MIN_GB, MAX_GB].
+ram_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+size_gb=$(( ram_kb / 1024 / 1024 ))
+(( size_gb < MIN_GB )) && size_gb=$MIN_GB
+(( size_gb > MAX_GB )) && size_gb=$MAX_GB
+
+# Refuse to fill the disk: leave at least 3x the swapfile size free.
+avail_gb=$(( $(stat -f -c '%a * %S' /var) / 1024 / 1024 / 1024 ))
+if (( avail_gb < size_gb * 3 )); then
+    echo "only ${avail_gb}G free on /var, need $(( size_gb * 3 ))G for a ${size_gb}G swapfile; skipping" >&2
+    exit 0
+fi
+
+fstype=$(findmnt -no FSTYPE --target /var)
+echo "creating ${size_gb}G swapfile at $SWAPFILE on $fstype"
+
+if [[ $fstype == btrfs ]]; then
+    # mkswapfile sets NODATACOW and disables compression, both of which are
+    # mandatory for a swapfile on btrfs.
+    btrfs filesystem mkswapfile --size "${size_gb}g" --uuid clear "$SWAPFILE"
+else
+    install -m 0600 /dev/null "$SWAPFILE"
+    chattr +C "$SWAPFILE" 2>/dev/null || true
+    dd if=/dev/zero of="$SWAPFILE" bs=1M count=$(( size_gb * 1024 )) status=none
+    mkswap --uuid clear "$SWAPFILE"
+fi
+
+chmod 0600 "$SWAPFILE"

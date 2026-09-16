@@ -1,0 +1,15 @@
+[Unit]
+Description=Disk-backed swap on /var/swapfile
+Documentation=https://github.com/iiroan/astral
+ConditionVirtualization=!container
+Requires=astral-swapfile.service
+After=astral-swapfile.service
+
+[Swap]
+What=/var/swapfile
+# Lower than zram0 (100) so hot pages compress first and only the
+# overflow reaches the disk.
+Options=pri=10
+
+[Install]
+WantedBy=swap.target

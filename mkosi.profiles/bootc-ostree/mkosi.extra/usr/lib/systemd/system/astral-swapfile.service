@@ -1,0 +1,16 @@
+[Unit]
+Description=Create disk-backed swapfile
+Documentation=https://github.com/iiroan/astral
+DefaultDependencies=no
+ConditionPathExists=!/var/swapfile
+ConditionVirtualization=!container
+After=local-fs.target
+Before=var-swapfile.swap swap.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/astral/setup-swapfile
+
+[Install]
+WantedBy=swap.target

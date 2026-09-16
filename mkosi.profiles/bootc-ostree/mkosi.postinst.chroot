@@ -48,3 +48,12 @@ sed -i -e 's, /root, /var/roothome,' /usr/lib/tmpfiles.d/provision.conf > /dev/n
 # Redirect stdout to /dev/null because of some weird stdout issue
 # with newer rpm-ostree: https://github.com/coreos/rpm-ostree/pull/5388#issuecomment-2971623787
 sed -i -e '/^d- \/var\/roothome /d' /usr/lib/tmpfiles.d/provision.conf > /dev/null
+
+# Swap: zram alone livelocks the kernel under pressure (no backing store to
+# evict to), so a disk-backed swapfile must be created on first boot.
+test -x /usr/libexec/astral/setup-swapfile
+bash -n /usr/libexec/astral/setup-swapfile
+stat /usr/lib/systemd/system/astral-swapfile.service
+stat /usr/lib/systemd/system/var-swapfile.swap
+grep -Fx 'ManagedOOMSwap=kill' /usr/lib/systemd/system/-.slice.d/10-astral-oomd-swap.conf
+grep -Fx 'zram-size = min(ram, 8192)' /usr/lib/systemd/zram-generator.conf

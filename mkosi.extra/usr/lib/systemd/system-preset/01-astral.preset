@@ -11,3 +11,5 @@ enable greetd.service
 enable ntpd-rs.service
 enable systemd-resolved.service
 enable cardwired.service
+enable astral-swapfile.service
+enable var-swapfile.swap
