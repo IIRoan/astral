@@ -91,7 +91,7 @@ check-update:
         exit 1
     fi
 
-# Update the system image, Flatpaks, Distrobox containers, Homebrew, and global npm packages
+# Update the system image, Flatpaks, Distrobox containers, and Homebrew
 [group('System')]
 update:
     #!/usr/bin/env bash
@@ -154,29 +154,16 @@ update:
             return 0
         fi
 
-        # Ensure brew (and brew-provided tools like npm) are on PATH for this recipe.
+        # Ensure brew is on PATH for this recipe.
         eval "$("${brew_bin}" shellenv)"
         brew update
         brew upgrade
-    }
-
-    update_npm() {
-        # Prefer brew's environment when present so global npm matches the image tooling.
-        if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
-            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-        fi
-        if ! command -v npm >/dev/null 2>&1; then
-            echo "npm is not installed; skipping"
-            return 0
-        fi
-        npm update -g
     }
 
     run_step "System image" update_system
     run_step "Flatpak" update_flatpak
     run_step "Distrobox" update_distrobox
     run_step "Homebrew" update_brew
-    run_step "npm (global)" update_npm
 
     echo
     if (( failures > 0 )); then
