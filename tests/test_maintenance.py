@@ -54,6 +54,9 @@ with open(os.environ['NOTIFICATIONS'], 'a') as f:
 import os, sys
 if sys.argv[1] == 'refresh':
     sys.exit(0)
+if sys.argv[1] == 'get-devices':
+    print(os.environ.get('FIRMWARE_DEVICES', '{}'))
+    sys.exit(0)
 print(os.environ.get('FIRMWARE', '{}'))
 sys.exit(int(os.environ.get('FIRMWARE_RC', '0')))
 """)
@@ -126,6 +129,14 @@ sys.exit(int(os.environ.get('FIRMWARE_RC', '0')))
         result = self.run_helper("update-health", "--notify")
         self.assertIn("System image: timer disabled", result.stdout)
         self.assertEqual(self.notifications(), [])
+
+    def test_pending_firmware_reboot_is_reported_even_without_new_updates(self):
+        self.env["FIRMWARE_DEVICES"] = json.dumps({"Devices": [{
+            "Name": "UEFI dbx", "DeviceId": "dbx", "UpdateState": 4,
+        }]})
+        result = self.run_helper("update-health", "--notify")
+        self.assertIn("Firmware update staged", result.stdout)
+        self.assertIn("Reboot when convenient", self.notifications()[0])
 
     def test_user_timer_setup_respects_later_disable_choices(self):
         self.run_helper("update-user-setup")

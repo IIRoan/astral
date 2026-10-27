@@ -4,7 +4,9 @@ Documentation=https://github.com/iiroan/astral
 DefaultDependencies=no
 ConditionPathExists=!/var/swapfile
 ConditionVirtualization=!container
-After=local-fs.target
+# Waiting for all local filesystems creates a cycle through tmp.mount and
+# swap.target. Only /var must be mounted before creating the swapfile.
+RequiresMountsFor=/var
 Before=var-swapfile.swap swap.target
 
 [Service]

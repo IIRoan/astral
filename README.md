@@ -93,8 +93,9 @@ stores it as a seven-day Actions artifact.
 
 System images and both system and user Flatpaks update daily, retrying failures
 every 15 minutes with a limit of four starts per two hours. Images are staged
-until your next normal reboot; automatic updates never restart your session. Homebrew maintenance runs
-through a shared lock, so manual and scheduled upgrades cannot overlap.
+until your next normal reboot; automatic updates never restart your session.
+Homebrew maintenance runs through a shared lock, so manual and scheduled
+upgrades cannot overlap.
 `ajust status` reports actual update health, and desktop notifications repeat
 daily while a failure or pending system reboot remains unresolved. Firmware is
 checked daily and requires `ajust update-firmware` to apply; unresolved firmware

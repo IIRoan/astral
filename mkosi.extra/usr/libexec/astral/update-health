@@ -44,6 +44,13 @@ fi
 if [[ -n "$staged" ]]; then
     echo 'System update downloaded: reboot when convenient to finish installing it.'
 fi
+firmware_reboot=""
+if command -v fwupdmgr >/dev/null 2>&1; then
+    firmware_reboot="$(fwupdmgr get-devices --json | jq -r '[.Devices[]? | select(.UpdateState == 4) | .DeviceId] | sort | join(",")')"
+    if [[ -n "$firmware_reboot" ]]; then
+        echo 'Firmware update staged: reboot when convenient to finish installing it.'
+    fi
+fi
 
 [[ "$mode" == --notify ]] || exit 0
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/astral"
@@ -53,8 +60,8 @@ urgency=normal
 if ((${#failures[@]})); then
     message="$(printf '%s\n' "${failures[@]}")"$'\n\n'"Run ajust status for details. Downloads retry automatically."
     urgency=critical
-elif [[ -n "$staged" ]]; then
-    message="A system update is ready. Reboot when convenient to finish installing it."
+elif [[ -n "$staged" || -n "$firmware_reboot" ]]; then
+    message="A system or firmware update is ready. Reboot when convenient to finish installing it."
 fi
 if [[ -z "$message" ]]; then
     rm -f "$state_file"
@@ -62,7 +69,7 @@ if [[ -z "$message" ]]; then
 fi
 
 # Repeat unresolved problems daily, and report changed failures immediately.
-key="$(printf '%s\n%s' "$message" "$staged" | sha256sum | cut -d' ' -f1)"
+key="$(printf '%s\n%s\n%s' "$message" "$staged" "$firmware_reboot" | sha256sum | cut -d' ' -f1)"
 now="$(date +%s)"
 if [[ -f "$state_file" ]]; then
     previous_key="$(jq -r '.key // empty' "$state_file")"
