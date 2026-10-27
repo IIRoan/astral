@@ -14,4 +14,3 @@ trap 'rm -f "$tmp"' EXIT
 awk '$1 ~ /^#/ || $2 != "/"' "$fstab" > "$tmp"
 SYSTEMD_FSTAB="$tmp" LIBMOUNT_FSTAB="$tmp" SYSTEMD_REMOUNT_ROOT_RW=0 \
     /usr/lib/systemd/systemd-remount-fs
-

@@ -31,4 +31,3 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" "$PR_URL"
-

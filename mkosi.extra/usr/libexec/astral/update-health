@@ -77,4 +77,3 @@ tmp="$(mktemp "$state_dir/.update-health.XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 jq -n --arg key "$key" --argjson now "$now" '{key: $key, notified_at: $now}' > "$tmp"
 mv "$tmp" "$state_file"
-
