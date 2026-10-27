@@ -1,0 +1,15 @@
+[Unit]
+Description=Set up user update timers after the desktop starts
+# Ordinary timers run before timers.target/basic.target. This session timer
+# must be free to start after the compositor without creating a cycle.
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Timer]
+OnActiveSec=30s
+
+[Install]
+WantedBy=graphical-session.target

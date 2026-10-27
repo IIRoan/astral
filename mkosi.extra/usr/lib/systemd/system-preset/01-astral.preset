@@ -9,6 +9,7 @@ enable astral-flatpak-update.timer
 enable accounts-daemon.service
 enable fwupd-refresh.timer
 enable greetd.service
+enable input-remapper.service
 enable ntpd-rs.service
 enable systemd-resolved.service
 enable cardwired.service
