@@ -59,7 +59,7 @@ jobs:
   image_checks:
     name: Image checks
     if: always()
-    needs: [validate, build]
+    needs: [validate, build, keepalive]
     runs-on: ubuntu-26.04
     permissions: {}
     steps:
@@ -67,7 +67,11 @@ jobs:
         env:
           VALIDATE_RESULT: ${{ needs.validate.result }}
           BUILD_RESULT: ${{ needs.build.result }}
-        run: test "$VALIDATE_RESULT" = success && test "$BUILD_RESULT" = success
+          KEEPALIVE_RESULT: ${{ needs.keepalive.result }}
+        run: |
+          test "$VALIDATE_RESULT" = success
+          test "$BUILD_RESULT" = success
+          test "$KEEPALIVE_RESULT" = success || test "$KEEPALIVE_RESULT" = skipped
 
   report:
     if: >-
