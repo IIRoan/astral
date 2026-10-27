@@ -1,4 +1,6 @@
 enable astral-firmware-check.timer
+enable astral-flatpak-update.timer
+enable astral-update-health.timer
 enable astral-sync-noctalia-greeter.service
 enable chezmoi-init.service
 enable chezmoi-update.timer

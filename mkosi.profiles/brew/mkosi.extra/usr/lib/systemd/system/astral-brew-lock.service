@@ -1,0 +1,13 @@
+[Unit]
+Description=Serialize manual and scheduled Homebrew maintenance
+Wants=brew-proxy-setup.service
+After=brew-proxy-setup.service
+ConditionPathIsSymbolicLink=/home/linuxbrew/.linuxbrew/proxy/brew-original
+ConditionFileIsExecutable=/home/linuxbrew/.linuxbrew/Homebrew/bin/brew
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=linuxbrew
+WorkingDirectory=/home/linuxbrew
+ExecStart=/usr/libexec/astral/install-brew-lock

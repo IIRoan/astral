@@ -1,0 +1,9 @@
+[Unit]
+Description=Report failed updates and pending system reboots
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+ExecStart=/usr/libexec/astral/update-health --notify
+

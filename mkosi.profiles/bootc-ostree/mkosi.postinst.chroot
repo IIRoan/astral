@@ -7,8 +7,10 @@ dracut -v --force "${KERNEL_PATH}/initramfs.img" --kver "$(basename "${KERNEL_PA
 sed -i 's|^ExecStart=.*|ExecStart=/usr/bin/bootc update --quiet|' /usr/lib/systemd/system/bootc-fetch-apply-updates.service
 bootupctl backend generate-update-metadata
 
-# Automatic updates without rebooting the system all the time
-sed -i 's|^OnUnitInactiveSec=.*|OnUnitInactiveSec=7d\nPersistent=true|' /usr/lib/systemd/system/bootc-fetch-apply-updates.timer
+# Astral's timer drop-in checks daily and retries failed downloads. Updates are
+# staged for the next normal reboot; the service deliberately omits --apply.
+stat /usr/lib/systemd/system/bootc-fetch-apply-updates.timer.d/50-astral.conf
+stat /usr/lib/systemd/system/bootc-fetch-apply-updates.service.d/50-astral.conf
 sed -i 's|#AutomaticUpdatePolicy.*|AutomaticUpdatePolicy=stage|' /etc/rpm-ostreed.conf
 sed -i 's|#LockLayering.*|LockLayering=true|' /etc/rpm-ostreed.conf
 

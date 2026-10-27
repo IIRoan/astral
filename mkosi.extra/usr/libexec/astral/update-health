@@ -1,0 +1,80 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+mode="${1:-}"
+if [[ -n "$mode" && "$mode" != --notify ]]; then
+    echo "Usage: update-health [--notify]" >&2
+    exit 2
+fi
+
+failures=()
+check_update() {
+    local scope="$1" timer="$2" label="$3"
+    local -a ctl=(systemctl)
+    [[ "$scope" == user ]] && ctl+=(--user)
+    local enabled active result condition next
+    enabled="$("${ctl[@]}" is-enabled "$timer.timer" 2>/dev/null || true)"
+    active="$("${ctl[@]}" show "$timer.service" -p ActiveState --value)"
+    result="$("${ctl[@]}" show "$timer.service" -p Result --value)"
+    condition="$("${ctl[@]}" show "$timer.service" -p ConditionResult --value)"
+    next="$("${ctl[@]}" show "$timer.timer" -p NextElapseUSecRealtime --value)"
+
+    printf '%s: timer %s; service %s (%s)' "$label" "${enabled:-unavailable}" "${active:-unavailable}" "${result:-not yet run}"
+    [[ -n "$next" ]] && printf '; next %s' "$next"
+    printf '\n'
+    if [[ "$active" == failed || ( "$active" == activating && "$result" != success && -n "$result" ) ]]; then
+        failures+=("$label: ${result:-failed}")
+    elif [[ "$enabled" == enabled && "$condition" == no ]]; then
+        printf '  Last run skipped: installation is not available yet.\n'
+    fi
+}
+
+check_update system bootc-fetch-apply-updates 'System image'
+check_update system astral-flatpak-update 'System Flatpaks'
+check_update user astral-flatpak-update 'User Flatpaks'
+check_update system brew-update 'Homebrew metadata'
+check_update system brew-upgrade 'Homebrew packages'
+check_update user astral-firmware-check 'Firmware checks'
+
+staged=""
+if command -v rpm-ostree >/dev/null 2>&1; then
+    deployments="$(rpm-ostree status --json)"
+    staged="$(jq -r '[.deployments[]? | select(.staged == true) | .["container-image-reference-digest"] // .checksum] | first // empty' <<< "$deployments")"
+fi
+if [[ -n "$staged" ]]; then
+    echo 'System update downloaded: reboot when convenient to finish installing it.'
+fi
+
+[[ "$mode" == --notify ]] || exit 0
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/astral"
+state_file="$state_dir/update-health.json"
+message=""
+urgency=normal
+if ((${#failures[@]})); then
+    message="$(printf '%s\n' "${failures[@]}")"$'\n\n'"Run ajust status for details. Downloads retry automatically."
+    urgency=critical
+elif [[ -n "$staged" ]]; then
+    message="A system update is ready. Reboot when convenient to finish installing it."
+fi
+if [[ -z "$message" ]]; then
+    rm -f "$state_file"
+    exit 0
+fi
+
+# Repeat unresolved problems daily, and report changed failures immediately.
+key="$(printf '%s\n%s' "$message" "$staged" | sha256sum | cut -d' ' -f1)"
+now="$(date +%s)"
+if [[ -f "$state_file" ]]; then
+    previous_key="$(jq -r '.key // empty' "$state_file")"
+    notified_at="$(jq -r '.notified_at // 0' "$state_file")"
+    if [[ "$key" == "$previous_key" && "$notified_at" =~ ^[0-9]+$ ]] && (( now - notified_at < 86400 )); then
+        exit 0
+    fi
+fi
+notify-send -a Astral -u "$urgency" -i software-update-available 'Astral updates' "$message"
+mkdir -p "$state_dir"
+tmp="$(mktemp "$state_dir/.update-health.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+jq -n --arg key "$key" --argjson now "$now" '{key: $key, notified_at: $now}' > "$tmp"
+mv "$tmp" "$state_file"
+

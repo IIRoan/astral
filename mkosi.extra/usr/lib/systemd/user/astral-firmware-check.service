@@ -2,10 +2,14 @@
 Description=Notify when firmware updates are available (never auto-applies)
 Documentation=man:fwupdmgr(1)
 After=graphical-session.target
-Wants=network-online.target
+StartLimitIntervalSec=2h
+StartLimitBurst=4
 
 [Service]
 Type=oneshot
 # User bus path so notify-send reaches Noctalia even from a timer.
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
 ExecStart=/usr/libexec/astral/firmware-update-check
+Restart=on-failure
+RestartSec=15min
+TimeoutStartSec=5min

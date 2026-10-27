@@ -1,0 +1,17 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+# ComposeFS is mounted by the initramfs and cannot be remounted. Keep the
+# original systemd implementation for /usr and API filesystems, using a filtered
+# fstab only for this invocation. The actual fstab and mount options stay intact.
+if [[ "$(findmnt --noheadings --output SOURCE --mountpoint /)" != composefs ]]; then
+    exec /usr/lib/systemd/systemd-remount-fs
+fi
+fstab="${SYSTEMD_FSTAB:-/etc/fstab}"
+[[ -e "$fstab" ]] || exec /usr/lib/systemd/systemd-remount-fs
+tmp="$(mktemp /run/astral-remount.XXXXXX)"
+trap 'rm -f "$tmp"' EXIT
+awk '$1 ~ /^#/ || $2 != "/"' "$fstab" > "$tmp"
+SYSTEMD_FSTAB="$tmp" LIBMOUNT_FSTAB="$tmp" SYSTEMD_REMOUNT_ROOT_RW=0 \
+    /usr/lib/systemd/systemd-remount-fs
+

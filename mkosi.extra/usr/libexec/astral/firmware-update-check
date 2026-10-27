@@ -33,13 +33,14 @@ case "${updates_rc}" in
         ;;
     *)
         echo "firmware-update-check: fwupdmgr get-updates failed (exit ${updates_rc})" >&2
-        exit 0
+        exit "${updates_rc}"
         ;;
 esac
 
 json="${json#"${json%%\{*}"}"
-if [[ -z "${json}" || "${json}" != \{* ]]; then
-    exit 0
+if [[ -z "${json}" || "${json}" != \{* ]] || ! jq -e 'type == "object"' >/dev/null <<< "$json"; then
+    echo 'firmware-update-check: invalid firmware response' >&2
+    exit 1
 fi
 
 mapfile -t upgrades < <(
@@ -60,11 +61,14 @@ fi
 
 release_ids="$(printf '%s\n' "${upgrades[@]}" | cut -f3 | sort -u | paste -sd, -)"
 previous_ids=""
+previous_check=0
+now="$(date +%s)"
 if [[ -f "${STATE_FILE}" ]]; then
     previous_ids="$(jq -r '.release_ids // empty' "${STATE_FILE}" 2>/dev/null || true)"
+    previous_check="$(jq -r '.notified_at // 0' "${STATE_FILE}" 2>/dev/null || echo 0)"
 fi
 
-if [[ "${release_ids}" == "${previous_ids}" ]]; then
+if [[ "${release_ids}" == "${previous_ids}" && "$previous_check" =~ ^[0-9]+$ ]] && (( now - previous_check < 86400 )); then
     exit 0
 fi
 
@@ -100,5 +104,6 @@ jq -n \
     --arg ids "${release_ids}" \
     --argjson count "${count}" \
     --arg checked "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{release_ids: $ids, count: $count, checked_at: $checked}' \
+    --argjson notified_at "$now" \
+    '{release_ids: $ids, count: $count, checked_at: $checked, notified_at: $notified_at}' \
     >"${STATE_FILE}"
