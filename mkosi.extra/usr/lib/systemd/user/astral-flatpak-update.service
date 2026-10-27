@@ -1,0 +1,13 @@
+[Unit]
+Description=Update this user's Flatpak applications and runtimes
+ConditionPathExists=%h/.local/share/flatpak/repo/config
+StartLimitIntervalSec=2h
+StartLimitBurst=4
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flatpak update --user --noninteractive --assumeyes
+Restart=on-failure
+RestartSec=15min
+TimeoutStartSec=1h
+Nice=10

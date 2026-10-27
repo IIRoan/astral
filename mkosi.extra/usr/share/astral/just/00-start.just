@@ -11,7 +11,7 @@ status:
 
     echo "=== Image ==="
     if [[ -e /sysroot/ostree || -e /sysroot/composefs ]] && command -v bootc >/dev/null 2>&1; then
-        bootc status || sudo bootc status
+        bootc status 2>/dev/null || rpm-ostree status
     else
         echo "Not a bootc deployment"
     fi
@@ -29,11 +29,9 @@ status:
     else
         echo "Signature policy: not installed"
     fi
-    if systemctl is-enabled bootc-fetch-apply-updates.timer >/dev/null 2>&1; then
-        echo "Automatic updates: enabled"
-    else
-        echo "Automatic updates: disabled"
-    fi
+    echo
+    echo "=== Automatic update health ==="
+    /usr/libexec/astral/update-health
 
     echo
     echo "=== Containers ==="

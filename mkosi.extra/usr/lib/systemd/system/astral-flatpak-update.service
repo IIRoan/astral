@@ -1,0 +1,15 @@
+[Unit]
+Description=Update system Flatpak applications and runtimes
+Wants=network-online.target
+After=network-online.target flatpak-add-flathub-repos.service
+ConditionPathExists=/var/lib/flatpak/repo/config
+StartLimitIntervalSec=2h
+StartLimitBurst=4
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flatpak update --system --noninteractive --assumeyes
+Restart=on-failure
+RestartSec=15min
+TimeoutStartSec=1h
+Nice=10

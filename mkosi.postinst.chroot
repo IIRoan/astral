@@ -8,6 +8,9 @@ niri validate --config /usr/share/factory/etc/niri/config.kdl
 noctalia-greeter sessions | grep -Fqx Niri
 stat /usr/libexec/astral/noctalia-greeter-guard
 stat /usr/libexec/astral/firmware-update-check
+test -x /usr/libexec/astral/update-health
+test -x /usr/libexec/astral/update-user-setup
+test -x /usr/libexec/astral/composefs-remount
 grep -Fx 'L+ /etc/greetd/config.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 grep -Fx 'C+ /var/lib/noctalia-greeter/greeter.toml 0640 greeter greeter - /usr/share/astral/noctalia-greeter.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 grep -Fx 'ConditionFileIsExecutable=/usr/bin/noctalia' /usr/lib/systemd/user/astral-sync-noctalia-greeter.service

@@ -5,6 +5,7 @@ enable auditd.service
 enable firewalld.service
 enable flatpak-add-flathub-repos.service
 enable flatpak-preinstall.service
+enable astral-flatpak-update.timer
 enable accounts-daemon.service
 enable fwupd-refresh.timer
 enable greetd.service

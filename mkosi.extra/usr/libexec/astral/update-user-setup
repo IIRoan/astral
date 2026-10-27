@@ -1,0 +1,10 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+# Enable the new timers once for existing users after a rebase. Later choices
+# to disable them are respected on subsequent logins.
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/astral"
+[[ ! -e "$state_dir/update-timers-v1" ]] || exit 0
+systemctl --user enable --now astral-flatpak-update.timer astral-update-health.timer
+mkdir -p "$state_dir"
+touch "$state_dir/update-timers-v1"

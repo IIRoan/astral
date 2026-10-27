@@ -66,7 +66,7 @@ jobs:
           for platform in $(tr ',' ' ' <<< "${PLATFORMS}") ; do
             MATRIX="$(jq -c ".include += [{\"platform\": \"${platform}\"}]" <<< "${MATRIX}")"
           done
-          echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
+          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
 
   build_push:
     name: Build and push image
@@ -91,10 +91,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install mkosi
-        uses: systemd/mkosi@1da3299aecc56a1ba590a7fb7ae868275bb46d93 # main
+        uses: systemd/mkosi@ecf7f5702bb2052b7a69cab3fe7d37bc3b9ad77b # v27.1
 
       - name: Install just
-        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
 
       - name: Render configuration (for debugging)
         run: mkosi cat-config --debug
@@ -112,23 +112,23 @@ jobs:
           if [ "$CI_MKOSI_RELEASE" != "" ] ; then
             RELEASE_ARGUMENTS+=("--release=$CI_MKOSI_RELEASE")
           fi
-          sudo mkosi -B -ff --debug --profile=base,base-desktop,bootc-ostree,brew,astral-bootc-ostree,${CI_MKOSI_PROFILES} ${PROFILE_ARGUMENTS} ${RELEASE_ARGUMENTS} --environment=GITHUB_TOKEN=${GITHUB_TOKEN}
+          sudo mkosi -B -ff --debug "--profile=base,base-desktop,bootc-ostree,brew,astral-bootc-ostree${CI_MKOSI_PROFILES:+,${CI_MKOSI_PROFILES}}" "${RELEASE_ARGUMENTS[@]}" "--environment=GITHUB_TOKEN=${GITHUB_TOKEN}"
 
       - name: Load image
         id: load
         run: |
           set -e
-          env IMAGE_FULL="localhost/${IMAGE_NAME}:${DEFAULT_TAG}" $(which just) load
+          env IMAGE_FULL="localhost/${IMAGE_NAME}:${DEFAULT_TAG}" just load
 
       - name: Rechunk image
         run: |
           set -e
-          env IMAGE_FULL="localhost/${IMAGE_NAME}:${DEFAULT_TAG}" $(which just) rechunk
+          env IMAGE_FULL="localhost/${IMAGE_NAME}:${DEFAULT_TAG}" just rechunk
 
       - name: Lint image
         run: |
           set -e
-          env IMAGE_FULL="localhost/${IMAGE_NAME}:${DEFAULT_TAG}" $(which just) lint
+          env IMAGE_FULL="localhost/${IMAGE_NAME}:${DEFAULT_TAG}" just lint
 
       - name: Login to GitHub Container Registry
         if: inputs.publish
@@ -179,7 +179,7 @@ jobs:
 
       - name: Upload Output Artifacts
         if: inputs.publish
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ env.IMAGE_NAME }}-${{ matrix.platform }}
           retention-days: 1
@@ -222,9 +222,9 @@ jobs:
         # https://linux.die.net/man/1/date
       - name: Get current date
         id: date
-        run:
+        run: |
           set -xeuo pipefail
-          echo "date=$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)" >> "${GITHUB_OUTPUT}"
+          echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "${GITHUB_OUTPUT}"
 
       - name: Get mkosi metadata
         id: imagemetadata
@@ -285,7 +285,7 @@ jobs:
 
       - name: Fetch Build Outputs
         if: inputs.publish
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: ${{ env.IMAGE_NAME }}-*
           merge-multiple: true
@@ -351,7 +351,7 @@ jobs:
 
       - name: Attest image provenance
         if: inputs.publish
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.publish.outputs.digest }}

@@ -85,9 +85,27 @@ just build
 ```
 
 GitHub Actions publishes the multi-architecture image to GHCR on pushes to the
-default branch and on a weekly schedule so Fedora security updates land without a
-manual commit. The separate manual ISO workflow builds an AMD64 installer and
+default branch and daily so Fedora security updates land without a manual commit.
+The scheduled job refreshes its workflow activity to prevent GitHub's inactivity
+timeout. Failed builds open an issue which closes when builds recover.
+The separate manual ISO workflow builds an AMD64 installer and
 stores it as a seven-day Actions artifact.
+
+System images and both system and user Flatpaks update daily, retrying failures
+every 15 minutes with a limit of four starts per two hours. Images are staged
+until your next normal reboot; automatic updates never restart your session.
+Homebrew maintenance runs through a shared lock, so manual and scheduled
+upgrades cannot overlap.
+`ajust status` reports actual update health, and desktop notifications repeat
+daily while a failure or pending system reboot remains unresolved. Firmware is
+checked daily and requires `ajust update-firmware` to apply; unresolved firmware
+updates are also reminded daily.
+
+Dependabot checks Action versions daily and rebases update PRs automatically.
+Minor and patch updates can merge automatically after the required `Image checks`
+status passes; major upgrades require review. Configure the repository to allow
+auto-merge and protect `main` with `Image checks` required. The merge workflow
+reads verified bot metadata and never runs PR code with a write token.
 
 ## Update Security
 

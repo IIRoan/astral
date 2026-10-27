@@ -1,0 +1,21 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+# Keep the original symlink layout: brew derives its prefix from this path.
+brew_bin=/home/linuxbrew/.linuxbrew/proxy/brew-unlocked
+lock_file=/home/linuxbrew/.linuxbrew/var/homebrew/locks/astral-maintenance.lock
+
+# Keep shell startup and queries available during long package operations.
+case "${1:-}" in
+    shellenv|--prefix|--cellar|--repository|--cache|--version|-v|--help|-h|help|config|info|list|ls|leaves|outdated|search|commands)
+        exec "$brew_bin" "$@"
+        ;;
+esac
+
+# Nested brew commands inherit the lock held by their parent operation.
+if [[ "${ASTRAL_BREW_LOCKED:-}" == 1 ]]; then
+    exec "$brew_bin" "$@"
+fi
+
+exec /usr/bin/flock --exclusive "$lock_file" \
+    /usr/bin/env ASTRAL_BREW_LOCKED=1 "$brew_bin" "$@"

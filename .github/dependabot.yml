@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+      time: "06:17"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 10
+    rebase-strategy: auto
+    groups:
+      actions:
+        update-types:
+          - minor
+          - patch

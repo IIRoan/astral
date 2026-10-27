@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly update health checks
+
+[Timer]
+OnBootSec=15min
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

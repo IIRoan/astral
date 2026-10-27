@@ -1,0 +1,22 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+original=/home/linuxbrew/.linuxbrew/proxy/brew-original
+unlocked=/home/linuxbrew/.linuxbrew/proxy/brew-unlocked
+if [[ -L "$unlocked" ]]; then
+    [[ "$(readlink "$unlocked")" == ../Homebrew/bin/brew ]]
+elif [[ -e "$unlocked" ]]; then
+    echo "Refusing to replace an existing unlocked brew entry point" >&2
+    exit 1
+else
+    ln -s ../Homebrew/bin/brew "$unlocked"
+fi
+case "$(readlink "$original")" in
+    ../Homebrew/bin/brew|/usr/libexec/astral/brew-locked|/etc/astral/brew-locked)
+        ln -sfn /usr/libexec/astral/brew-locked "$original"
+        ;;
+    *)
+        echo "Refusing to replace an unrecognized brew-proxy entry point" >&2
+        exit 1
+        ;;
+esac

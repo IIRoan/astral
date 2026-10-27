@@ -9,3 +9,8 @@ cp -a "${SRCDIR}/cache/ublue-brew/." /
 
 stat /usr/lib/systemd/system/brew-setup.service
 stat /usr/share/homebrew.tar.zst
+test -x /usr/libexec/astral/brew-locked
+test -x /usr/libexec/astral/install-brew-lock
+stat /usr/lib/systemd/system/astral-brew-lock.service
+stat /usr/lib/systemd/system/brew-update.service.d/50-astral-brew-proxy.conf
+stat /usr/lib/systemd/system/brew-upgrade.service.d/50-astral-brew-proxy.conf
