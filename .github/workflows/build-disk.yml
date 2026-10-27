@@ -27,33 +27,24 @@ jobs:
           TARGET_IMAGE: ghcr.io/iiroan/astral:latest
           TARGET_CONFIG: ./iso.toml
         run: |
+          set -euo pipefail
           sudo podman pull "${TARGET_IMAGE}"
+          SOURCE_IMAGE="$(sudo podman image inspect --format '{{index .RepoDigests 0}}' "${TARGET_IMAGE}")"
+          echo "ISO source: ${SOURCE_IMAGE}"
+          echo "source-image=${SOURCE_IMAGE}" >> "$GITHUB_OUTPUT"
           sudo mkdir -p rpm-gpg output
-          sudo podman run --rm -it -v ./rpm-gpg:/out:Z "${TARGET_IMAGE}" bash -c 'cp /etc/pki/rpm-gpg/* /out'
+          sudo podman run --rm -v ./rpm-gpg:/out:Z "${SOURCE_IMAGE}" bash -c 'cp /etc/pki/rpm-gpg/* /out'
           sudo podman run \
             --rm \
             --privileged \
             --pull=newer \
             --security-opt label=type:unconfined_t \
-            --entrypoint /bin/sh \
-            -e TARGET_IMAGE="${TARGET_IMAGE}" \
             -v "${TARGET_CONFIG}:/config.toml:ro" \
             -v ./output/:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
             -v ./rpm-gpg/:/etc/pki/rpm-gpg/:ro \
             quay.io/centos-bootc/bootc-image-builder:latest \
-            -c 'set -eu
-              DEFS=""
-              for d in /usr/share/bootc-image-builder/defs /usr/share/image-builder/defs; do
-                if [ -d "$d" ]; then DEFS="$d"; break; fi
-              done
-              [ -n "$DEFS" ] || exit 1
-              FEDORA_DEF=$(ls -1 "$DEFS"/fedora-*.yaml | sort -V | tail -n1)
-              for f in "$DEFS"/fedora-*.yaml; do
-                ln -sfn "$(basename "$f")" "$DEFS/$(basename "$f" | sed "s/^fedora-/astral-/")"
-              done
-              ln -sfn "$(basename "$FEDORA_DEF")" "$DEFS/astral-44.yaml"
-              exec /usr/bin/bootc-image-builder --type iso --rootfs btrfs --use-librepo=True "$TARGET_IMAGE"'
+            build --type iso --rootfs btrfs --output /output "${SOURCE_IMAGE}"
           echo "output-directory=$(realpath ./output)" >> "$GITHUB_OUTPUT"
 
       - name: Brand ISOs
@@ -65,7 +56,6 @@ jobs:
           podman rmi -a -f
           sudo podman run \
             --rm \
-            -it \
             --pull=newer \
             --privileged \
             -v /dev:/dev \
