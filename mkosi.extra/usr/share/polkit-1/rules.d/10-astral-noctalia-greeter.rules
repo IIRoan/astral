@@ -1,8 +1,10 @@
 polkit.addRule(function(action, subject) {
-    if (action.id !== "org.noctalia.greeter.apply-appearance") {
-        return;
-    }
-    if (subject.isInGroup("wheel") && subject.local) {
+    // Only the constrained appearance protocol may run without a prompt.
+    // The legacy helper also changes session commands and must stay authenticated.
+    if (action.id === "org.noctalia.greeter.sync-appearance" &&
+        action.lookup("program") === "/usr/bin/noctalia-greeter-apply-appearance" &&
+        action.lookup("user") === "root" &&
+        subject.isInGroup("wheel") && subject.local && subject.active) {
         return polkit.Result.YES;
     }
 });

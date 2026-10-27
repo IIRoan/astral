@@ -1,0 +1,9 @@
+[Unit]
+Description=Set up this user's update timers
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/astral/update-user-setup
+TimeoutStartSec=30s
