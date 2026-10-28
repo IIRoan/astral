@@ -44,7 +44,11 @@ elif operation == 'enable':
     with open(os.environ['NOTIFICATIONS'], 'a') as f:
         f.write('enable timers\\n')
 """)
-        self.stub("rpm-ostree", "import os; print(os.environ['DEPLOYMENTS'])")
+        self.stub("rpm-ostree", """
+import os, sys
+print(os.environ['DEPLOYMENTS'])
+sys.exit(int(os.environ.get('DEPLOYMENTS_RC', '0')))
+""")
         self.stub("notify-send", """
 import json, os, sys
 with open(os.environ['NOTIFICATIONS'], 'a') as f:
@@ -56,7 +60,7 @@ if sys.argv[1] == 'refresh':
     sys.exit(0)
 if sys.argv[1] == 'get-devices':
     print(os.environ.get('FIRMWARE_DEVICES', '{}'))
-    sys.exit(0)
+    sys.exit(int(os.environ.get('FIRMWARE_DEVICES_RC', '0')))
 print(os.environ.get('FIRMWARE', '{}'))
 sys.exit(int(os.environ.get('FIRMWARE_RC', '0')))
 """)
@@ -137,6 +141,30 @@ sys.exit(int(os.environ.get('FIRMWARE_RC', '0')))
         result = self.run_helper("update-health", "--notify")
         self.assertIn("Firmware update staged", result.stdout)
         self.assertIn("Reboot when convenient", self.notifications()[0])
+
+    def test_status_query_errors_do_not_suppress_other_update_alerts(self):
+        self.set_failure()
+        original_env = self.env.copy()
+        for name, changes, label in [
+            ("firmware unavailable", {"FIRMWARE_DEVICES_RC": "1"}, "Firmware status"),
+            ("invalid firmware response", {"FIRMWARE_DEVICES": "{invalid"}, "Firmware status"),
+            ("deployment unavailable", {"DEPLOYMENTS_RC": "1"}, "System deployment status"),
+            ("invalid deployment response", {"DEPLOYMENTS": "{invalid"}, "System deployment status"),
+        ]:
+            with self.subTest(name=name):
+                self.env = original_env | changes
+                (self.tmp / "notifications").unlink(missing_ok=True)
+                (self.tmp / "state/astral/update-health.json").unlink(missing_ok=True)
+                self.run_helper("update-health", "--notify")
+                self.assertEqual(len(self.notifications()), 1)
+                self.assertIn("System image: exit-code", self.notifications()[0])
+                self.assertIn(f"{label}: query failed", self.notifications()[0])
+
+    def test_status_query_error_is_reported_without_other_failures(self):
+        self.env["FIRMWARE_DEVICES_RC"] = "1"
+        self.run_helper("update-health", "--notify")
+        self.assertIn("Firmware status: query failed", self.notifications()[0])
+        self.assertIn("critical", self.notifications()[0])
 
     def test_user_timer_setup_respects_later_disable_choices(self):
         self.run_helper("update-user-setup")

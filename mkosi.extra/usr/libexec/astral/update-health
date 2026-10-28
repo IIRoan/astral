@@ -38,15 +38,23 @@ check_update user astral-firmware-check 'Firmware checks'
 
 staged=""
 if command -v rpm-ostree >/dev/null 2>&1; then
-    deployments="$(rpm-ostree status --json)"
-    staged="$(jq -r '[.deployments[]? | select(.staged == true) | .["container-image-reference-digest"] // .checksum] | first // empty' <<< "$deployments")"
+    # A failed status query must not suppress alerts already collected above.
+    if ! staged="$(rpm-ostree status --json | jq -r '[.deployments[]? | select(.staged == true) | .["container-image-reference-digest"] // .checksum] | first // empty')"; then
+        staged=""
+        echo 'System deployment status: query failed' >&2
+        failures+=('System deployment status: query failed')
+    fi
 fi
 if [[ -n "$staged" ]]; then
     echo 'System update downloaded: reboot when convenient to finish installing it.'
 fi
 firmware_reboot=""
 if command -v fwupdmgr >/dev/null 2>&1; then
-    firmware_reboot="$(fwupdmgr get-devices --json | jq -r '[.Devices[]? | select(.UpdateState == 4) | .DeviceId] | sort | join(",")')"
+    if ! firmware_reboot="$(fwupdmgr get-devices --json | jq -r '[.Devices[]? | select(.UpdateState == 4) | .DeviceId] | sort | join(",")')"; then
+        firmware_reboot=""
+        echo 'Firmware status: query failed' >&2
+        failures+=('Firmware status: query failed')
+    fi
     if [[ -n "$firmware_reboot" ]]; then
         echo 'Firmware update staged: reboot when convenient to finish installing it.'
     fi
@@ -58,7 +66,7 @@ state_file="$state_dir/update-health.json"
 message=""
 urgency=normal
 if ((${#failures[@]})); then
-    message="$(printf '%s\n' "${failures[@]}")"$'\n\n'"Run ajust status for details. Downloads retry automatically."
+    message="$(printf '%s\n' "${failures[@]}")"$'\n\n'"Run ajust status for details. Checks and downloads retry automatically."
     urgency=critical
 elif [[ -n "$staged" || -n "$firmware_reboot" ]]; then
     message="A system or firmware update is ready. Reboot when convenient to finish installing it."
