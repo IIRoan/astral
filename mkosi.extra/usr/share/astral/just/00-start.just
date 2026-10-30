@@ -89,7 +89,7 @@ check-update:
         exit 1
     fi
 
-# Update the system image, Flatpaks, Distrobox containers, and Homebrew
+# Update the system image, Tailscale, Flatpaks, Distrobox containers, and Homebrew
 [group('System')]
 update:
     #!/usr/bin/env bash
@@ -129,6 +129,14 @@ update:
         flatpak update -y
     }
 
+    update_tailscale() {
+        local helper="/usr/libexec/astral/update-tailscale"
+        if [[ ! -x "${helper}" ]]; then
+            helper="/usr/local/libexec/astral/update-tailscale"
+        fi
+        pkexec "${helper}" --apply
+    }
+
     update_distrobox() {
         if ! command -v distrobox >/dev/null 2>&1; then
             echo "Distrobox is not installed; skipping"
@@ -159,6 +167,7 @@ update:
     }
 
     run_step "System image" update_system
+    run_step "Tailscale" update_tailscale
     run_step "Flatpak" update_flatpak
     run_step "Distrobox" update_distrobox
     run_step "Homebrew" update_brew
@@ -171,6 +180,17 @@ update:
     fi
     echo "All update steps completed."
     echo "Firmware is separate: run 'ajust update-firmware'."
+
+# Update the Tailscale CLI and running daemon without waiting for an OS reboot
+[group('System')]
+update-tailscale:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    helper="/usr/libexec/astral/update-tailscale"
+    if [[ ! -x "${helper}" ]]; then
+        helper="/usr/local/libexec/astral/update-tailscale"
+    fi
+    pkexec "${helper}" --apply
 
 # Refresh firmware metadata and apply available fwupd updates
 [group('System')]

@@ -96,6 +96,14 @@ every 15 minutes with a limit of four starts per two hours. Images are staged
 until your next normal reboot; automatic updates never restart your session.
 Homebrew maintenance runs through a shared lock, so manual and scheduled
 upgrades cannot overlap.
+`ajust update` also updates Tailscale's CLI and running daemon from the official
+stable channel, verifies the download checksum, and preserves the node login and
+addresses. `ajust update-tailscale` runs just that step. Activation failures
+restore the previous service and state; private recovery snapshots are retained
+under `/var/lib/astral/tailscale-updates`. This update uses persistent vendor
+binaries so security fixes do not have to wait for the next image reboot.
+Inherited Cockpit service and socket units are masked; Astral does not start the
+privileged Cockpit web administration container.
 `ajust status` reports actual update health, and desktop notifications repeat
 daily while a failure or pending system reboot remains unresolved. Firmware is
 checked daily and requires `ajust update-firmware` to apply; unresolved firmware

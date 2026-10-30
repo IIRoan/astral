@@ -1,5 +1,7 @@
 disable sshd.service
 disable sshd.socket
+disable cockpit.service
+disable cockpit.socket
 disable systemd-timesyncd.service
 enable auditd.service
 enable firewalld.service

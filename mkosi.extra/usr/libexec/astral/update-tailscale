@@ -1,0 +1,261 @@
+#!/usr/bin/python3
+"""Update the CLI and daemon from Tailscale's stable channel; check-only by default."""
+
+import argparse
+import datetime
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import re
+import shutil
+import subprocess
+import tarfile
+import tempfile
+import time
+import urllib.request
+
+ORIGIN = "https://pkgs.tailscale.com/stable/"
+RELEASES = Path("/usr/local/libexec/astral-tailscale")
+CURRENT = RELEASES / "current"
+BIN = Path("/usr/local/bin")
+DROPIN = Path("/etc/systemd/system/tailscaled.service.d/90-astral-stable.conf")
+STATE = Path("/var/lib/tailscale")
+BACKUPS = Path("/var/lib/astral/tailscale-updates")
+UNIT = """[Service]
+ExecStart=
+ExecStart=/usr/local/bin/tailscaled --state=/var/lib/tailscale/tailscaled.state --socket=/run/tailscale/tailscaled.sock --port=${PORT}
+ExecStopPost=
+ExecStopPost=/usr/local/bin/tailscaled --cleanup
+"""
+
+
+def run(*args, check=True, timeout=30):
+    try:
+        return subprocess.run(args, capture_output=True, text=True, check=check, timeout=timeout)
+    except subprocess.CalledProcessError as error:
+        if error.stderr:
+            error.add_note(error.stderr.strip())
+        raise
+
+
+def version_tuple(value):
+    if not re.fullmatch(r"\d+\.\d+\.\d+", value):
+        raise ValueError("Invalid stable version")
+    return tuple(map(int, value.split(".")))
+
+
+def download(name, limit):
+    with urllib.request.urlopen(ORIGIN + name, timeout=30) as response:
+        if not response.url.startswith(ORIGIN):
+            raise ValueError("Unexpected download redirect")
+        data = response.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError("Download exceeds size limit")
+    return data
+
+
+def stable_release():
+    metadata = json.loads(download("?mode=json", 1024 * 1024))
+    version = metadata["TarballsVersion"]
+    if version_tuple(version) < (1, 104, 4):
+        raise ValueError("Stable release is older than the security baseline")
+    arch = {"x86_64": "amd64", "aarch64": "arm64"}[platform.machine()]
+    name = f"tailscale_{version}_{arch}.tgz"
+    if metadata["Tarballs"].get(arch) != name:
+        raise ValueError("Unexpected stable archive name")
+    return version, name
+
+
+def stage_release(version, name):
+    expected = download(name + ".sha256", 4096).decode().split()[0]
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", expected):
+        raise ValueError("Invalid vendor checksum")
+    archive = download(name, 150 * 1024 * 1024)
+    if hashlib.sha256(archive).hexdigest().lower() != expected.lower():
+        raise ValueError("Vendor archive checksum mismatch")
+    RELEASES.mkdir(parents=True, exist_ok=True, mode=0o755)
+    if RELEASES.is_symlink() or RELEASES.stat().st_uid != os.geteuid() or RELEASES.stat().st_mode & 0o022:
+        raise ValueError("Unsafe release directory")
+    RELEASES.chmod(0o755)
+    destination = RELEASES / version
+    if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
+        raise ValueError(f"Unexpected existing release: {destination}")
+    with tempfile.TemporaryDirectory(prefix=".install-", dir=RELEASES) as work:
+        work = Path(work)
+        tgz = work / "download.tgz"
+        tgz.write_bytes(archive)
+        with tarfile.open(tgz, "r:gz") as source:
+            for binary in ["tailscale", "tailscaled"]:
+                member = source.getmember(name.removesuffix(".tgz") + "/" + binary)
+                if not member.isfile() or member.size > 150 * 1024 * 1024:
+                    raise ValueError("Invalid executable in vendor archive")
+                with source.extractfile(member) as incoming, (work / binary).open("xb") as output:
+                    shutil.copyfileobj(incoming, output)
+                (work / binary).chmod(0o755)
+                actual = run(str(work / binary), "--version").stdout.splitlines()[0]
+                if actual != version:
+                    raise ValueError("Executable version does not match stable metadata")
+        tgz.unlink()
+        work.chmod(0o755)
+        if destination.exists():
+            # A failed activation may leave a verified release for the retry.
+            if destination.stat().st_uid != os.geteuid() or destination.stat().st_mode & 0o022:
+                raise ValueError("Unsafe existing release directory")
+            for binary in ["tailscale", "tailscaled"]:
+                existing = destination / binary
+                if existing.is_symlink() or not existing.is_file() or existing.stat().st_uid != os.geteuid() or existing.stat().st_mode & 0o022:
+                    raise ValueError("Unsafe existing executable")
+                if hashlib.sha256(existing.read_bytes()).digest() != hashlib.sha256((work / binary).read_bytes()).digest():
+                    raise ValueError("Existing release does not match verified vendor archive")
+            return destination
+        work.rename(destination)
+    return destination
+
+
+def label_release(release):
+    # /usr/local is persistent /var/usrlocal on bootc. Keep executable labels
+    # across relabels/reboots, matching the image's packaged daemon.
+    if Path("/sys/fs/selinux/enforce").exists():
+        context = run("/usr/bin/stat", "-c", "%C", "/usr/bin/tailscaled").stdout.strip()
+        executable_type = context.split(":")[2]
+        # SELinux maps /var/usrlocal back to /usr/local and requires rules
+        # against that logical path, rather than the resolved storage path.
+        pattern = str(RELEASES) + "(/.*)?"
+        current = run("/usr/sbin/matchpathcon", "-n", str(release / "tailscaled")).stdout.strip()
+        if current.split(":")[2] != executable_type:
+            result = run("/usr/sbin/semanage", "fcontext", "-a", "-t", executable_type, pattern, check=False)
+            if result.returncode:
+                run("/usr/sbin/semanage", "fcontext", "-m", "-t", executable_type, pattern)
+        run("/usr/sbin/restorecon", "-RF", str(RELEASES.resolve()))
+
+
+def status():
+    cli = BIN / "tailscale" if (BIN / "tailscale").exists() else Path("/usr/bin/tailscale")
+    return json.loads(run(str(cli), "status", "--json", timeout=15).stdout)
+
+
+def same_node(before, after):
+    return before["Self"]["ID"] == after.get("Self", {}).get("ID") and before["Self"].get("TailscaleIPs") == after.get("Self", {}).get("TailscaleIPs")
+
+
+def wait_online(before, version=None):
+    deadline = time.monotonic() + 45
+    while time.monotonic() < deadline:
+        try:
+            result = status()
+            if result.get("BackendState") == "Running" and result.get("Self", {}).get("Online"):
+                if not same_node(before, result):
+                    raise RuntimeError("Tailscale node identity or addresses changed")
+                if version is not None and result.get("Version", "").split("-")[0] != version:
+                    raise RuntimeError("Running daemon version does not match the update")
+                return result
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError):
+            pass
+        time.sleep(1)
+    raise RuntimeError("Tailscale did not reconnect within 45 seconds")
+
+
+def point(path, target):
+    temporary = path.with_name(path.name + ".installing")
+    if temporary.exists() or temporary.is_symlink():
+        raise ValueError(f"Unexpected temporary link: {temporary}")
+    temporary.symlink_to(target)
+    temporary.replace(path)
+
+
+def activate(release, version, before):
+    pointers = {p: os.readlink(p) if p.is_symlink() else None for p in [CURRENT, BIN / "tailscale", BIN / "tailscaled"]}
+    for p in pointers:
+        if p.exists() and not p.is_symlink():
+            raise ValueError(f"Refusing to replace an unmanaged executable: {p}")
+    previous_dropin = DROPIN.read_bytes() if DROPIN.exists() else None
+    backup = BACKUPS / datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    backup.mkdir(parents=True, mode=0o700)
+    BACKUPS.chmod(0o700)
+    (backup / "previous-service.txt").write_text(run("/usr/bin/systemctl", "cat", "tailscaled.service").stdout)
+    manifest = {"target_version": version, "previous_pointers": {str(k): v for k, v in pointers.items()}, "previous_dropin_present": previous_dropin is not None}
+    (backup / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    if previous_dropin is not None:
+        (backup / "previous-dropin.conf").write_bytes(previous_dropin)
+    stopped = False
+    state_saved = False
+    try:
+        run("/usr/bin/systemctl", "stop", "tailscaled.service", timeout=60)
+        stopped = True
+        shutil.copytree(STATE, backup / "state-before", symlinks=True)
+        state_saved = True
+        point(CURRENT, release)
+        for binary in ["tailscale", "tailscaled"]:
+            point(BIN / binary, CURRENT / binary)
+        DROPIN.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+        DROPIN.parent.chmod(0o755)
+        DROPIN.write_text(UNIT)
+        DROPIN.chmod(0o644)
+        run("/usr/bin/systemctl", "daemon-reload")
+        run("/usr/bin/systemctl", "start", "tailscaled.service", timeout=60)
+        current = wait_online(before, version)
+        pid = run("/usr/bin/systemctl", "show", "tailscaled.service", "-p", "MainPID", "--value").stdout.strip()
+        if Path(f"/proc/{pid}/exe").resolve() != (release / "tailscaled").resolve():
+            raise RuntimeError("Service is not running the verified new executable")
+        (backup / "success.json").write_text(json.dumps({"version": version, "same_identity_and_addresses": same_node(before, current), "online": True}))
+    except BaseException:
+        if stopped:
+            print("Activation failed; restoring the previous service and state.", flush=True)
+            run("/usr/bin/systemctl", "stop", "tailscaled.service", check=False, timeout=60)
+            if previous_dropin is None:
+                DROPIN.unlink(missing_ok=True)
+            else:
+                DROPIN.write_bytes(previous_dropin)
+            for path, previous in pointers.items():
+                if path.is_symlink():
+                    path.unlink()
+                if previous is not None:
+                    path.symlink_to(previous)
+            if state_saved:
+                STATE.rename(backup / "state-after-failed-update")
+                shutil.copytree(backup / "state-before", STATE, symlinks=True)
+                run("/usr/sbin/restorecon", "-RF", str(STATE))
+            run("/usr/bin/systemctl", "daemon-reload")
+            run("/usr/bin/systemctl", "start", "tailscaled.service", timeout=60)
+            wait_online(before)
+        raise
+    print(f"Tailscale CLI and running daemon updated to {version}; node identity and addresses preserved.")
+    print(f"Private rollback snapshot: {backup}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--apply", action="store_true", help="Apply the update with administrator privileges")
+    args = parser.parse_args()
+    if args.apply and os.geteuid() != 0:
+        parser.error("--apply requires root")
+    version, name = stable_release()
+    before = status()
+    running = before.get("Version", "").split("-")[0]
+    cli = BIN / "tailscale" if (BIN / "tailscale").exists() else Path("/usr/bin/tailscale")
+    installed = run(str(cli), "version").stdout.splitlines()[0]
+    print(f"Tailscale: CLI {installed}; running daemon {running}; stable {version}.", flush=True)
+    if version_tuple(running) >= version_tuple(version) and version_tuple(installed) >= version_tuple(version):
+        print("CLI and daemon are already current; no restart needed.")
+        return
+    if not args.apply:
+        print("Check only. Run 'ajust update-tailscale' or 'ajust update' to apply.")
+        return
+    if before.get("BackendState") != "Running" or not before.get("Self", {}).get("Online") or not before["Self"].get("ID"):
+        raise RuntimeError("Existing Tailscale node is not online; inspect before replacing it")
+    # Do not silently downgrade one half of a newer CLI/daemon installation.
+    if max(version_tuple(running), version_tuple(installed)) > version_tuple(version):
+        raise RuntimeError("A newer CLI or daemon is installed; refusing a downgrade")
+    os.umask(0o077)
+    with Path("/run/lock/astral-tailscale-update.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        release = stage_release(version, name)
+        label_release(release)
+        activate(release, version, before)
+
+
+if __name__ == "__main__":
+    main()
