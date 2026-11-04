@@ -49,7 +49,8 @@ jobs:
           shellcheck mkosi.extra/usr/bin/luks-tpm2-autounlock \
             mkosi.extra/usr/libexec/astral/{update-health,update-user-setup,firmware-update-check,composefs-remount,sync-noctalia-greeter} \
             mkosi.profiles/brew/mkosi.extra/usr/libexec/astral/{brew-locked,install-brew-lock} \
-            build-scripts/ensure-tool mkosi.profiles/{brew,jackrabbit}/mkosi.prepare.chroot tests/check-flatpak-update
+            build-scripts/ensure-tool mkosi.profiles/{brew,jackrabbit}/mkosi.prepare.chroot \
+            tests/check-flatpak-update tests/check-fedora-upgrade
 
   validate_tpm:
     name: TPM policy and recovery checks

@@ -39,7 +39,9 @@ command -v setterm
 command -v pkexec
 
 install -d /usr/share/astral/
-sed --sandbox -i -e '/gnome_keyring.so/ s/-auth/auth/ ; /gnome_keyring.so/ s/-session/session/' /etc/pam.d/greetd
+# Fedora 45 ships vendor PAM configuration in /usr/lib/pam.d. The bootc
+# profile removes any greeter package's /etc copy so it cannot shadow this.
+sed --sandbox -i -e '/gnome_keyring.so/ s/-auth/auth/ ; /gnome_keyring.so/ s/-session/session/' /usr/lib/pam.d/greetd
 # geoclue's demo agent only exists for desktops without their own agent prompt; with no agent geoclue still serves configured apps
 rm -f /etc/xdg/autostart/geoclue-demo-agent.desktop
 install -d /usr/share/bash-completion/completions /usr/share/zsh/site-functions /usr/share/fish/vendor_completions.d/

@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+# Run only inside a disposable, privileged image container. Exercise the real
+# Podman policy lookup with both a fresh installation and Fedora 44's links.
+set -euo pipefail
+
+if [[ ! -e /run/.containerenv && ! -e /.dockerenv ]]; then
+    echo 'Run this check inside a disposable image container.' >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1091
+source /usr/lib/os-release
+test "$VERSION_ID" = 45
+rpm -q kmscon-gl kmscon-freetype kmscon-pango gnome-keyring-pam podman netavark
+if rpm -q NetworkManager-vpnc; then
+    echo 'The retired NetworkManager-vpnc plugin is still installed.' >&2
+    exit 1
+fi
+
+test -s /usr/lib/pam.d/greetd
+test ! -e /etc/pam.d/greetd
+grep -Eq '^auth[[:space:]]+optional[[:space:]]+pam_gnome_keyring.so' /usr/lib/pam.d/greetd
+grep -Eq '^session[[:space:]]+optional[[:space:]]+pam_gnome_keyring.so[[:space:]]+auto_start' /usr/lib/pam.d/greetd
+grep -Eq '^auth[[:space:]]+include[[:space:]]+greetd$' /usr/lib/pam.d/greetd-spawn
+grep -Fx 'Conflicts=kmsconvt@tty1.service' /usr/lib/systemd/system/greetd.service.d/20-kmscon.conf
+grep -Fx 'After=kmsconvt@tty1.service' /usr/lib/systemd/system/greetd.service.d/20-kmscon.conf
+niri validate --config /usr/share/factory/etc/niri/config.kdl
+noctalia-greeter sessions | grep -Fqx Niri
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+export XDG_CONFIG_HOME="$work/config" XDG_DATA_HOME="$work/data"
+mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+
+show_policy() {
+    podman --root "$work/storage" --runroot "$work/runroot" --storage-driver vfs \
+        image trust show --raw > "$work/policy.json"
+}
+
+compare_policy() {
+    python3 - "$1" "$work/policy.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+assert json.loads(Path(sys.argv[1]).read_text()) == json.loads(Path(sys.argv[2]).read_text())
+PY
+}
+
+test ! -e /etc/containers/policy.json
+test ! -e /etc/containers/registries.d/iiroan.yaml
+show_policy
+compare_policy /usr/share/containers/policy.json
+ajust verify-image
+
+# An already deployed Fedora 44 image leaves these absolute factory links in
+# /etc. The compatibility links must resolve to the new vendor files.
+mkdir -p /etc/containers/registries.d
+ln -s /usr/share/factory/etc/containers/policy.json /etc/containers/policy.json
+ln -s /usr/share/factory/etc/containers/registries.d/iiroan.yaml /etc/containers/registries.d/iiroan.yaml
+test "$(readlink -e /etc/containers/policy.json)" = /usr/share/containers/policy.json
+test "$(readlink -e /etc/containers/registries.d/iiroan.yaml)" = /usr/share/containers/registries.d/iiroan.yaml
+show_policy
+compare_policy /usr/share/containers/policy.json
+ajust verify-image
+
+# Administrators retain precedence over the vendor policy.
+rm /etc/containers/policy.json
+printf '{"default":[{"type":"reject"}]}\n' > /etc/containers/policy.json
+show_policy
+compare_policy /etc/containers/policy.json
+if ajust verify-image; then
+    echo 'verify-image ignored the administrator policy override.' >&2
+    exit 1
+fi
+
+printf '%s\n' 'Fedora 45 greeter configuration and fresh/legacy/overridden container policies passed.'

@@ -131,6 +131,18 @@ jobs:
           podman run --rm -i --entrypoint=/usr/bin/bash \
             "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" < tests/check-flatpak-update
 
+      - name: Check Fedora upgrade compatibility in the built image
+        run: |
+          podman run --rm --privileged -i --entrypoint=/usr/bin/bash \
+            "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" < tests/check-fedora-upgrade
+
+      - name: Check TPM recovery with the built Fedora encryption tools
+        run: |
+          podman run --rm --privileged -i --entrypoint=/usr/bin/bash \
+            "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" -c \
+            'dnf5 install -y --setopt=install_weak_deps=False swtpm tpm2-tools </dev/null && exec python3 -' \
+            < tests/check-tpm-policy
+
       - name: Login to GitHub Container Registry
         if: inputs.publish
         env:
