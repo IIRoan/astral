@@ -234,10 +234,12 @@ jobs:
         run: |
           set -xeuo pipefail
           if [ "$MANUAL_RELEASE" != "" ] ; then
-            echo "distributionversion=${MANUAL_RELEASE}" >> "${GITHUB_OUTPUT}"
+            distribution_version="$MANUAL_RELEASE"
           else
-            echo "distributionversion=$(grep "Release=" mkosi.conf | cut -d= -f2)" >> "${GITHUB_OUTPUT}"
+            distribution_version="$(grep '^Release=' mkosi.conf | cut -d= -f2-)"
           fi
+          [[ "$distribution_version" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]
+          printf 'distributionversion=%s\n' "$distribution_version" >> "${GITHUB_OUTPUT}"
 
       - name: Image Metadata
         uses: chainguard-actions/docker-metadata-action@f00cce7d85a292451bbab8346cddfdfb3a7b0ea4 # v6.2.0

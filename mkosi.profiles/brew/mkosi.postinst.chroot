@@ -8,7 +8,10 @@ find "${SRCDIR}/cache/ublue-brew" -type f -exec setfattr -h -n user.update-inter
 cp -a "${SRCDIR}/cache/ublue-brew/." /
 
 stat /usr/lib/systemd/system/brew-setup.service
+stat /usr/lib/systemd/system/brew-proxy-fix-ownership.service
 stat /usr/share/homebrew.tar.zst
+stat /usr/share/factory/etc/homebrew/brew.env
+chmod 0644 /usr/share/factory/etc/homebrew/brew.env
 test -x /usr/libexec/astral/brew-locked
 test -x /usr/libexec/astral/install-brew-lock
 stat /usr/lib/systemd/system/astral-brew-lock.service

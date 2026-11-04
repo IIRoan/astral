@@ -83,6 +83,10 @@ Install `mkosi`, `just`, and Podman, then build the standard bootc image:
 just build
 ```
 
+The build tools run in an explicit Fedora 44 tools tree, independently of the
+host distribution and the image release. Update `ToolsTreeRelease` deliberately
+when changing the build environment.
+
 Build preparation checks downloaded tools against the versions and SHA-256 hashes
 in `build-scripts/tools.lock`, including cached downloads. Homebrew's bootstrap
 image is verified with the [upstream signing key](https://github.com/ublue-os/brew/blob/main/cosign.pub),
@@ -104,6 +108,10 @@ every 15 minutes with a limit of four starts per two hours. Images are staged
 until your next normal reboot; automatic updates never restart your session.
 Homebrew maintenance runs through a shared lock, so manual and scheduled
 upgrades cannot overlap.
+The brew-proxy ownership repair service runs before Astral installs its lock
+wrapper or starts scheduled Homebrew updates. The factory
+`/etc/homebrew/brew.env` keeps Brewfile dump and cleanup from including Cargo,
+Flatpak, Go, Krew, npm, uv, and VS Code packages outside Homebrew.
 `ajust status` reports actual update health, and desktop notifications repeat
 daily while a failure or pending system reboot remains unresolved. Firmware is
 checked daily and requires `ajust update-firmware` to apply; unresolved firmware
