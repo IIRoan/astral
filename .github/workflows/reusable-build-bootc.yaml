@@ -130,6 +130,11 @@ jobs:
           set -e
           env IMAGE_FULL="localhost/${IMAGE_NAME}:${DEFAULT_TAG}" just lint
 
+      - name: Check Flatpak updates in the built image
+        run: |
+          podman run --rm -i --entrypoint=/usr/bin/bash \
+            "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" < tests/check-flatpak-update
+
       - name: Login to GitHub Container Registry
         if: inputs.publish
         env:

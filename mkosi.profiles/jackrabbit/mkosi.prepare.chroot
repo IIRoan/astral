@@ -1,25 +1,38 @@
 #!/usr/bin/env bash
 
-set -xeuo pipefail
+set -euo pipefail
 
 mkdir -p "${SRCDIR}/cache"
+"${SRCDIR}/build-scripts/ensure-tool" oras
+"${SRCDIR}/build-scripts/ensure-tool" cosign
 
-if [ ! -e "${SRCDIR}/cache/oras" ] ; then
-	ORAS_VERSION="$("${SRCDIR}/ghcurl" https://api.github.com/repos/oras-project/oras/releases/latest | jq -rc .tag_name)"
-	ORAS_URL="$("${SRCDIR}/ghcurl" https://api.github.com/repos/oras-project/oras/releases/latest | jq -rc --arg tag_name "${ORAS_VERSION#v}" --arg arch "$(arch | sed "s/aarch/arm/;s/x86_64/amd64/")" '.assets[] | select(.name=="oras_" + $tag_name + "_linux_" + $arch + ".tar.gz") | .browser_download_url')"
-	"${SRCDIR}/ghcurl" "${ORAS_URL}" -Lo /dev/stdout | tar -xvzf - -C "${SRCDIR}/cache" --owner=0 --group=0 --no-same-owner --no-same-permissions oras
-fi
+work="$(mktemp -d "${SRCDIR}/cache/.jackrabbit.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
 
-if [ ! -e "${SRCDIR}/cache/linux-ogc" ] ; then
-	"${SRCDIR}/cache/oras" pull ghcr.io/opengamingcollective/kernel-packages-fedora:latest-fc44
-	mkdir -p "${SRCDIR}/cache/linux-ogc"
-	mv *.rpm "${SRCDIR}/cache/linux-ogc/"
-fi
+image=ghcr.io/opengamingcollective/kernel-packages-fedora
+digest="$("${SRCDIR}/cache/oras" resolve "$image:latest-fc44")"
+[[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo 'Invalid OGC kernel image digest' >&2; exit 1; }
+reference="$image@$digest"
+"${SRCDIR}/cache/cosign" verify \
+    --certificate-identity-regexp '^https://github\.com/OpenGamingCollective/kernel-packages/\.github/workflows/fedora\.yaml@refs/tags/[^/]+$' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    "$reference" > /dev/null
+"${SRCDIR}/cache/oras" pull --output "$work/kernel" "$reference"
+compgen -G "$work/kernel/*.rpm" > /dev/null
 
-if [ ! -e "${SRCDIR}/cache/valve-audio" ] ; then
-	curl --retry 3 --retry-delay 2 --retry-max-time 60 -fsSLo /dev/stdout https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steamdeck-dsp-1.00-1-any.pkg.tar.zst | tar --zstd -xvf - -C "${SRCDIR}/cache" --owner=0 --group=0 --no-same-owner --no-same-permissions usr/lib/firmware/amd usr/share/alsa/ucm2/conf.d
-	mkdir -p "${SRCDIR}/cache/valve-audio"
-	mv "${SRCDIR}/cache/usr/lib/firmware/amd" "${SRCDIR}/cache/valve-audio/sof_fw"
-	mv "${SRCDIR}/cache/usr/share/alsa/ucm2/conf.d/sof-nau8821-max" "${SRCDIR}/cache/valve-audio"
-	rm -rf "${SRCDIR}/cache/usr"
-fi
+curl --fail --show-error --silent --location --retry 3 \
+    --proto '=https' --proto-redir '=https' \
+    https://steamdeck-packages.steamos.cloud/archlinux-mirror/jupiter-main/os/x86_64/steamdeck-dsp-1.03-1-any.pkg.tar.zst \
+    --output "$work/valve-audio.tar.zst"
+printf '%s  %s\n' 1dc7c303a5503931b97bbeec44d5664d34f8cfe62050faa6992da5b005d72ae2 \
+    "$work/valve-audio.tar.zst" | sha256sum --check --strict -
+tar --zstd -xf "$work/valve-audio.tar.zst" -C "$work" --no-same-owner --no-same-permissions \
+    usr/lib/firmware/amd usr/share/alsa/ucm2/conf.d
+mkdir "$work/valve-audio"
+mv "$work/usr/lib/firmware/amd" "$work/valve-audio/sof_fw"
+mv "$work/usr/share/alsa/ucm2/conf.d/sof-nau8821-max" "$work/valve-audio/"
+
+# Publish caches only after every input has passed verification.
+rm -rf "${SRCDIR}/cache/linux-ogc" "${SRCDIR}/cache/valve-audio"
+mv "$work/kernel" "${SRCDIR}/cache/linux-ogc"
+mv "$work/valve-audio" "${SRCDIR}/cache/valve-audio"

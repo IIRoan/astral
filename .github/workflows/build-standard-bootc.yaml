@@ -44,10 +44,11 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Check greeter authorization boundaries
         run: node --test tests/test_greeter_policy.cjs
-      - name: Check maintenance shell scripts
+      - name: Check maintenance and build shell scripts
         run: |
           shellcheck mkosi.extra/usr/libexec/astral/{update-health,update-user-setup,firmware-update-check,composefs-remount,sync-noctalia-greeter} \
-            mkosi.profiles/brew/mkosi.extra/usr/libexec/astral/{brew-locked,install-brew-lock}
+            mkosi.profiles/brew/mkosi.extra/usr/libexec/astral/{brew-locked,install-brew-lock} \
+            build-scripts/ensure-tool mkosi.profiles/{brew,jackrabbit}/mkosi.prepare.chroot tests/check-flatpak-update
 
   build:
     needs: validate

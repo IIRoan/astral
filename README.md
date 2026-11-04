@@ -84,6 +84,15 @@ Install `mkosi`, `just`, and Podman, then build the standard bootc image:
 just build
 ```
 
+Build preparation checks downloaded tools against the versions and SHA-256 hashes
+in `build-scripts/tools.lock`, including cached downloads. Homebrew's bootstrap
+image is verified with the [upstream signing key](https://github.com/ublue-os/brew/blob/main/cosign.pub),
+vendored as `build-scripts/ublue-brew.pub`, before
+extracting the same immutable digest. The optional Jackrabbit profile also
+verifies its kernel image's signing workflow and its audio firmware checksum.
+Update tool versions and hashes together from the upstream release checksum
+manifests; signing-key changes require a reviewed update to the vendored key.
+
 GitHub Actions publishes the multi-architecture image to GHCR on pushes to the
 default branch and daily so Fedora security updates land without a manual commit.
 The scheduled job refreshes its workflow activity to prevent GitHub's inactivity
