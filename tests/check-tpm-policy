@@ -61,11 +61,11 @@ with tempfile.TemporaryDirectory(prefix="astral-tpm-policy-") as directory:
     def tpm_tokens():
         return [token for token in metadata()["tokens"].values() if token["type"] == "systemd-tpm2"]
 
-    def enroll(pcrs, *, credential=key, unlock_tpm=False, succeeds=True, tpm_device=device):
+    def enroll(pcrs, *, credential=key, unlock_tpm=False, succeeds=True, tpm_device=device, with_pin=False):
         unlock = f"--unlock-tpm2-device={device}" if unlock_tpm else f"--unlock-key-file={credential}"
         return run([
             "systemd-cryptenroll", unlock, f"--tpm2-device={tpm_device}",
-            f"--tpm2-pcrs={pcrs}", "--tpm2-with-pin=no", "--tpm2-public-key=",
+            f"--tpm2-pcrs={pcrs}", f"--tpm2-with-pin={'yes' if with_pin else 'no'}", "--tpm2-public-key=",
             "--tpm2-pcrlock=", "--wipe-slot=tpm2", str(image),
         ], succeeds=succeeds)
 
@@ -148,6 +148,18 @@ with tempfile.TemporaryDirectory(prefix="astral-tpm-policy-") as directory:
             enroll("7+14", unlock_tpm=True)
             recover()
             print(f"PASS: PCR {pcr} change rejects TPM unlock, recovery works, restored state unlocks after vTPM restart", flush=True)
+
+        # These fixed credentials belong only to the private emulator fixture.
+        env["NEWPIN"] = "disposable-vtpm-pin"
+        enroll("7+14", with_pin=True)
+        assert tpm_tokens()[0]["tpm2-pin"] is True
+        env["PIN"] = env["NEWPIN"]
+        enroll("7+14", unlock_tpm=True, with_pin=True)
+        recover()
+        assert metadata()["keyslots"]["0"] == password_slot
+        env.pop("PIN")
+        env.pop("NEWPIN")
+        print("PASS: PIN-protected TPM enrollment unlocks and retains independent recovery", flush=True)
 
         run(["systemd-cryptenroll", "--wipe-slot=tpm2", str(image)])
         assert tpm_tokens() == []

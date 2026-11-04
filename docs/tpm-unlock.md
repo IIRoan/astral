@@ -104,7 +104,8 @@ ambiguous devices, and enrollment failures without touching real devices.
 `tests/check-tpm-policy` uses a fresh 64 MiB LUKS2 file and a private `swtpm`
 socket. It verifies migration from an unbound enrollment, independent PCR 7
 and PCR 14 rejection, recovery after each failure, restoration after vTPM
-restarts, and preservation of the recovery slot when TPM unlocking is disabled.
+restarts, PIN-protected unlocking, and preservation of the recovery slot when
+TPM unlocking is disabled.
 CI runs this test as part of the required `Image checks` result.
 
 On Fedora, the test prerequisites are `swtpm`, `tpm2-tools`, `cryptsetup`, and
