@@ -68,7 +68,7 @@ jobs:
         run: sudo python3 tests/check-tpm-policy
 
   build:
-    needs: validate
+    needs: [validate, validate_tpm]
     uses: ./.github/workflows/reusable-build-bootc.yaml
     secrets: inherit
     with:
