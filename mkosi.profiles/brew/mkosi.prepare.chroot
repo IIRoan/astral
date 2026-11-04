@@ -1,15 +1,30 @@
 #!/usr/bin/env bash
 
-set -xeuo pipefail
+set -euo pipefail
 
 mkdir -p "${SRCDIR}/cache"
 
-if [ ! -e "${SRCDIR}/cache/crane" ] ; then
-	CRANE_URL="$("${SRCDIR}/ghcurl" https://api.github.com/repos/google/go-containerregistry/releases/latest | jq -rc --arg arch "$(arch | sed "s/aarch/arm/")" '.assets[] | select(.name=="go-containerregistry_Linux_" + $arch + ".tar.gz") | .browser_download_url')"
-	"${SRCDIR}/ghcurl" "${CRANE_URL}" -Lo /dev/stdout | tar -xvzf - -C "${SRCDIR}/cache" --owner=0 --group=0 --no-same-owner --no-same-permissions crane
-fi
+"${SRCDIR}/build-scripts/ensure-tool" crane
+"${SRCDIR}/build-scripts/ensure-tool" cosign
 
-if [ ! -e "${SRCDIR}/cache/ublue-brew" ] ; then
-	"${SRCDIR}/cache/crane" export ghcr.io/ublue-os/brew:latest | tar -xvf - -C "${SRCDIR}/cache" system_files
-	mv "${SRCDIR}/cache/system_files" "${SRCDIR}/cache/ublue-brew"
-fi
+case "$(uname -m)" in
+    x86_64) platform=linux/amd64 ;;
+    aarch64) platform=linux/arm64 ;;
+    *) echo 'Unsupported Homebrew image architecture' >&2; exit 1 ;;
+esac
+
+image=ghcr.io/ublue-os/brew
+digest="$("${SRCDIR}/cache/crane" digest "$image:latest")"
+[[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo 'Invalid Homebrew image digest' >&2; exit 1; }
+reference="$image@$digest"
+"${SRCDIR}/cache/cosign" verify --key "${SRCDIR}/build-scripts/ublue-brew.pub" "$reference" > /dev/null
+
+# Never trust the old extracted cache. Verify the manifest first and extract
+# that same digest, selecting the native platform from the signed index.
+work="$(mktemp -d "${SRCDIR}/cache/.ublue-brew.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
+"${SRCDIR}/cache/crane" export --platform "$platform" "$reference" - \
+    | tar -xf - -C "$work" --no-same-owner --no-same-permissions system_files
+test -d "$work/system_files"
+rm -rf "${SRCDIR}/cache/ublue-brew"
+mv "$work/system_files" "${SRCDIR}/cache/ublue-brew"

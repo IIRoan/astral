@@ -16,4 +16,5 @@ mkosi.crt
 mkosi.version
 mkosi.rootpw
 .mkosi-private
+.mkosi-ci/
 __pycache__/

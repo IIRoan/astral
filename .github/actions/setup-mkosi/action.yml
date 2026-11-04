@@ -1,0 +1,35 @@
+name: Set up mkosi
+description: Install the pinned mkosi CLI and its Ubuntu build prerequisites
+runs:
+  using: composite
+  steps:
+    # mkosi has no Chainguard Actions equivalent; fetch the same pinned CLI.
+    - name: Checkout mkosi source
+      uses: chainguard-actions/actions-checkout@37298d8de412b35988dd165ffae45f45b329d365 # v7.0.1
+      with:
+        repository: systemd/mkosi
+        ref: ecf7f5702bb2052b7a69cab3fe7d37bc3b9ad77b # v27.1
+        path: .mkosi-ci
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Install mkosi and prerequisites
+      shell: bash
+      run: |
+        sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_unconfined=0
+        sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_userns=0
+        sudo mkdir -p /var/lib/ca-certificates
+        # Match mkosi's setup for AppArmor profiles that break build sandboxes.
+        sudo aa-teardown || true
+        sudo apt-get remove --assume-yes apparmor
+        sudo apt-get update
+        arch_packages=()
+        for package in makepkg pacman-package-manager; do
+          if apt-cache show "$package" 2>/dev/null | grep -q '^Package: '; then
+            arch_packages+=("$package")
+          fi
+        done
+        sudo apt-get install --assume-yes --no-install-recommends \
+          debian-archive-keyring dnf zypper "${arch_packages[@]}"
+        sudo ln -svf "$GITHUB_WORKSPACE/.mkosi-ci/bin/mkosi" /usr/bin/mkosi
+        mkosi --version

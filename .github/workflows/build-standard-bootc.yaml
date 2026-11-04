@@ -39,15 +39,16 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: chainguard-actions/actions-checkout@37298d8de412b35988dd165ffae45f45b329d365 # v7.0.1
       - name: Check update and recovery behavior
         run: python3 -m unittest discover -s tests -v
       - name: Check greeter authorization boundaries
         run: node --test tests/test_greeter_policy.cjs
-      - name: Check maintenance shell scripts
+      - name: Check maintenance and build shell scripts
         run: |
           shellcheck mkosi.extra/usr/libexec/astral/{update-health,update-user-setup,firmware-update-check,composefs-remount,sync-noctalia-greeter} \
-            mkosi.profiles/brew/mkosi.extra/usr/libexec/astral/{brew-locked,install-brew-lock}
+            mkosi.profiles/brew/mkosi.extra/usr/libexec/astral/{brew-locked,install-brew-lock} \
+            build-scripts/ensure-tool mkosi.profiles/{brew,jackrabbit}/mkosi.prepare.chroot tests/check-flatpak-update
 
   build:
     needs: validate
@@ -85,7 +86,7 @@ jobs:
       issues: write
     steps:
       - name: Track failed automatic builds until they recover
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: chainguard-actions/actions-github-script@5ae8e66bc55d3cfc641b4dd912088e3996b815c2 # v9.0.0
         env:
           BUILD_RESULT: ${{ needs.image_checks.result }}
         with:
