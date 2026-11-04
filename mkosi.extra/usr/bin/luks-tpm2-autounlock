@@ -1,45 +1,122 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-# References:
-#  https://os.gnome.org/install
-#  https://www.reddit.com/r/Fedora/comments/uo4ufq/any_way_to_get_systemdcryptenroll_working_on/
-#  https://0pointer.net/blog/unlocking-luks2-volumes-with-tpm2-fido2-pkcs11-security-hardware-on-systemd-248.html
+# Never trace a recovery secret passed through the verification pipe.
+set +x
 
-gum confirm --affirmative="Enable" --negative="Disable" "Toggle TPM2 auto-unlock"
-EXIT_CODE="$?"
-case "${EXIT_CODE}" in
-  0|1)
-    ;;
-  *)
-    exit 0
-esac
+usage() {
+  printf 'Usage: luks-tpm2-autounlock [--device LUKS2_DEVICE]\n'
+}
 
-RD_LUKS_UUID="$(xargs -n1 -a /proc/cmdline | grep -E -e "rd.luks.(uuid|name)" | head -n 1 | cut -d= -f 2 | sed "s/^luks-//" )"
-CRYPT_DISK="$(realpath "/dev/disk/by-uuid/${RD_LUKS_UUID}")"
+if (( $# == 1 )) && [[ "$1" == --help || "$1" == -h ]]; then
+  usage
+  exit 0
+elif (( $# == 2 )) && [[ "$1" == --device ]]; then
+  candidate="$2"
+elif (( $# == 0 )); then
+  uuid=''
+  read -r -a boot_args <<< "$(cat /proc/cmdline)"
+  for arg in "${boot_args[@]}"; do
+    case "$arg" in
+      rd.luks.uuid=*|rd.luks.name=*)
+        value="${arg#*=}"
+        value="${value%%=*}"
+        value="${value#luks-}"
+        if [[ ! "$value" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]]; then
+          echo 'Invalid LUKS UUID on the kernel command line.' >&2
+          exit 1
+        fi
+        if [[ -n "$uuid" && "$uuid" != "$value" ]]; then
+          echo 'Multiple LUKS devices found; choose the intended device with --device.' >&2
+          exit 1
+        fi
+        uuid="$value"
+        ;;
+    esac
+  done
+  if [[ -z "$uuid" ]]; then
+    echo 'No LUKS device found on the kernel command line; use --device explicitly.' >&2
+    exit 1
+  fi
+  candidate="/dev/disk/by-uuid/$uuid"
+else
+  usage >&2
+  exit 2
+fi
 
-if ! find /dev -iname "${RD_LUKS_UUID:-INVALIDINVALID}" | grep -F -e "${RD_LUKS_UUID}" &>/dev/null; then
-  echo "Could not find LUKS device used to boot system on system mount table. Is your drive encrypted?"
+if ! crypt_disk="$(realpath -e -- "$candidate")" || [[ ! -b "$crypt_disk" && ! -f "$crypt_disk" ]]; then
+  echo 'The selected LUKS device does not exist.' >&2
   exit 1
 fi
 
-if [ "${EXIT_CODE}" == 1 ] ; then
-  sudo systemd-cryptenroll --wipe-slot=tpm2 "${CRYPT_DISK}"
+choice=0
+gum confirm --affirmative=Enable --negative=Disable "TPM2 auto-unlock for $crypt_disk" || choice=$?
+case "$choice" in
+  0|1) ;;
+  *) exit 0 ;;
+esac
+
+echo 'Keep a working LUKS passphrase or recovery key available for boot recovery.'
+if ! gum confirm --default=false --affirmative=Continue --negative=Cancel \
+  'I have my recovery credential available and will verify it before changing TPM enrollment.'; then
   exit 0
 fi
 
-gum confirm "Would you like to set up a PIN?"
-EXIT_CODE="$?"
-SET_PIN_ARG=""
-case "${EXIT_CODE}" in
-  0)
-    export SET_PIN_ARG="--tpm2-with-pin=yes"
-    ;;
-  1)
-    ;;
-  *)
-    exit 0
+sudo -v
+if ! sudo cryptsetup isLuks --type luks2 "$crypt_disk"; then
+  echo 'Only LUKS2 devices are supported.' >&2
+  exit 1
+fi
+
+if [[ "$choice" == 0 ]]; then
+  if ! secure_boot_state="$(sudo env LC_ALL=C mokutil --sb-state)" || [[ "$secure_boot_state" != 'SecureBoot enabled' ]]; then
+    echo 'Enable Secure Boot and boot through shim before enrolling this policy.' >&2
+    exit 1
+  fi
+  if ! sudo systemd-analyze --json=short pcrs 7 14 | python3 -c '
+import json, re, sys
+try:
+    rows = json.load(sys.stdin)
+    values = {row["nr"]: row.get("sha256") for row in rows}
+    for number in (7, 14):
+        value = values[number]
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", value):
+            raise ValueError("missing SHA-256 measurement")
+        if value.lower() in ("0" * 64, "f" * 64):
+            raise ValueError("uninitialized PCR")
+except (KeyError, TypeError, ValueError):
+    sys.exit(1)
+'; then
+    echo 'PCRs 7 and 14 must have initialized SHA-256 Secure Boot/shim measurements.' >&2
+    exit 1
+  fi
+fi
+
+# Supplying a key file on stdin bypasses automatic token unlocking, so this
+# checks an independent recovery credential without logging or storing it.
+if ! systemd-ask-password -n --echo=no --timeout=0 'LUKS recovery passphrase or key:' \
+  | sudo cryptsetup open --type luks2 --test-passphrase --disable-external-tokens --key-file=- "$crypt_disk"; then
+  echo 'Recovery verification failed; TPM enrollment was not changed.' >&2
+  exit 1
+fi
+
+if [[ "$choice" == 1 ]]; then
+  sudo systemd-cryptenroll --wipe-slot=tpm2 "$crypt_disk"
+  echo 'TPM2 auto-unlock disabled. Use the verified recovery credential at boot.'
+  exit 0
+fi
+
+pin_choice=0
+gum confirm --default=false 'Require a PIN in addition to PCRs 7+14?' || pin_choice=$?
+case "$pin_choice" in
+  0) pin_arg=--tpm2-with-pin=yes ;;
+  1) pin_arg=--tpm2-with-pin=no ;;
+  *) exit 0 ;;
 esac
 
-if sudo systemd-cryptenroll --wipe-slot=tpm2 --tpm2-device=auto --tpm2-pcrs='' ${SET_PIN_ARG} "${CRYPT_DISK}" ; then
-  echo "TPM2 LUKS auto-unlock configured for next reboot."
-fi
+# systemd enrolls successfully before wiping old TPM slots; passphrase and
+# recovery slots are preserved. Do not split this into separate commands.
+sudo systemd-cryptenroll --wipe-slot=tpm2 --tpm2-device=auto --tpm2-pcrs=7+14 "$pin_arg" "$crypt_disk"
+echo 'TPM2 enrollment now binds to Secure Boot/shim PCRs 7+14.'
+echo 'Keep the verified recovery credential available and test a normal reboot.'
+echo 'Secure Boot, dbx, or MOK changes can require recovery unlock and re-enrollment.'

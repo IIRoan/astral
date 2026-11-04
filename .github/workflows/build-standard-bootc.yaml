@@ -46,9 +46,26 @@ jobs:
         run: node --test tests/test_greeter_policy.cjs
       - name: Check maintenance and build shell scripts
         run: |
-          shellcheck mkosi.extra/usr/libexec/astral/{update-health,update-user-setup,firmware-update-check,composefs-remount,sync-noctalia-greeter} \
+          shellcheck mkosi.extra/usr/bin/luks-tpm2-autounlock \
+            mkosi.extra/usr/libexec/astral/{update-health,update-user-setup,firmware-update-check,composefs-remount,sync-noctalia-greeter} \
             mkosi.profiles/brew/mkosi.extra/usr/libexec/astral/{brew-locked,install-brew-lock} \
             build-scripts/ensure-tool mkosi.profiles/{brew,jackrabbit}/mkosi.prepare.chroot tests/check-flatpak-update
+
+  validate_tpm:
+    name: TPM policy and recovery checks
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: chainguard-actions/actions-checkout@37298d8de412b35988dd165ffae45f45b329d365 # v7.0.1
+      - name: Install software TPM test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            swtpm tpm2-tools libtss2-tcti-swtpm0t64 cryptsetup-bin systemd-cryptsetup
+      - name: Verify migration, PCR rejection, and recovery on a disposable image
+        run: sudo python3 tests/check-tpm-policy
 
   build:
     needs: validate
@@ -62,17 +79,19 @@ jobs:
   image_checks:
     name: Image checks
     if: always()
-    needs: [validate, build, keepalive]
+    needs: [validate, validate_tpm, build, keepalive]
     runs-on: ubuntu-26.04
     permissions: {}
     steps:
-      - name: Require maintenance checks and both image builds to succeed
+      - name: Require maintenance, TPM recovery, and both image builds to succeed
         env:
           VALIDATE_RESULT: ${{ needs.validate.result }}
+          TPM_RESULT: ${{ needs.validate_tpm.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           KEEPALIVE_RESULT: ${{ needs.keepalive.result }}
         run: |
           test "$VALIDATE_RESULT" = success
+          test "$TPM_RESULT" = success
           test "$BUILD_RESULT" = success
           test "$KEEPALIVE_RESULT" = success || test "$KEEPALIVE_RESULT" = skipped
 

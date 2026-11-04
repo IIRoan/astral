@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""Exercise real TPM policy changes using only a disposable LUKS2 image/vTPM."""
+
+import json
+import os
+from pathlib import Path
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+
+
+if os.geteuid() != 0:
+    # No host privilege is acquired: all files and sockets belong to this user.
+    os.execvp("unshare", ["unshare", "--user", "--map-root-user", sys.executable, __file__])
+
+for binary in ("swtpm", "tpm2_pcrextend", "cryptsetup", "systemd-cryptenroll"):
+    if not shutil.which(binary):
+        raise SystemExit(f"Missing test prerequisite: {binary}")
+
+
+with tempfile.TemporaryDirectory(prefix="astral-tpm-policy-") as directory:
+    root = Path(directory)
+    state = root / "state"
+    state.mkdir()
+    image = root / "test-luks.img"
+    with image.open("xb") as stream:
+        stream.truncate(64 * 1024 * 1024)
+    assert stat.S_ISREG(image.stat().st_mode) and image.parent == root
+    key = root / "recovery.key"
+    key.write_bytes(b"disposable-test-recovery-credential")
+    key.chmod(0o600)
+    bad_key = root / "wrong.key"
+    bad_key.write_bytes(b"wrong-disposable-test-credential")
+    bad_key.chmod(0o600)
+    socket = root / "swtpm.sock"
+    device = f"swtpm:path={socket}"
+    env = os.environ.copy()
+    for name in ("PASSWORD", "NEWPASSWORD", "PIN", "NEWPIN", "CREDENTIALS_DIRECTORY", "SYSTEMD_TPM2_DEVICE"):
+        env.pop(name, None)
+    # Always name the private emulator explicitly; never auto-select a host TPM.
+    env["TPM2TOOLS_TCTI"] = device
+    server = None
+    server_log = (root / "swtpm.log").open("w")
+
+    def run(args, *, succeeds=True, recovery_input=None):
+        stdin = {"stdin": subprocess.DEVNULL} if recovery_input is None else {"input": recovery_input}
+        result = subprocess.run(args, env=env, **stdin,
+                                text=True, capture_output=True, timeout=60)
+        if succeeds and result.returncode != 0:
+            raise RuntimeError(f"{Path(args[0]).name} failed: {result.stderr[-2000:]}")
+        if not succeeds:
+            assert result.returncode != 0, "An invalid unlock unexpectedly succeeded"
+        return result
+
+    def metadata():
+        return json.loads(run(["cryptsetup", "luksDump", "--dump-json-metadata", str(image)]).stdout)
+
+    def tpm_tokens():
+        return [token for token in metadata()["tokens"].values() if token["type"] == "systemd-tpm2"]
+
+    def enroll(pcrs, *, credential=key, unlock_tpm=False, succeeds=True, tpm_device=device):
+        unlock = f"--unlock-tpm2-device={device}" if unlock_tpm else f"--unlock-key-file={credential}"
+        return run([
+            "systemd-cryptenroll", unlock, f"--tpm2-device={tpm_device}",
+            f"--tpm2-pcrs={pcrs}", "--tpm2-with-pin=no", "--tpm2-public-key=",
+            "--tpm2-pcrlock=", "--wipe-slot=tpm2", str(image),
+        ], succeeds=succeeds)
+
+    def recover():
+        run(["cryptsetup", "open", "--type", "luks2", "--test-passphrase",
+             "--disable-external-tokens", "--key-file=-", str(image)], recovery_input=key.read_text())
+
+    def extend(pcr, digit):
+        run(["tpm2_pcrextend", "-T", device, f"{pcr}:sha256=" + digit * 64])
+
+    def start():
+        global server
+        server = subprocess.Popen([
+            "swtpm", "socket", "--tpm2", "--tpmstate", f"dir={state}",
+            "--server", f"type=unixio,path={socket}",
+            "--ctrl", f"type=unixio,path={socket}.ctrl",
+            "--flags", "not-need-init,startup-clear",
+        ], env=env, stdout=server_log, stderr=server_log)
+        for _ in range(100):
+            if socket.exists():
+                break
+            assert server.poll() is None, "Software TPM exited during startup"
+            time.sleep(0.05)
+        assert socket.exists(), "Software TPM did not become ready"
+        # Simulate initialized Secure Boot/shim measurements instead of zero PCRs.
+        extend(7, "1")
+        extend(14, "2")
+
+    def stop():
+        global server
+        if server is not None:
+            server.terminate()
+            server.wait(timeout=10)
+            server = None
+        socket.unlink(missing_ok=True)
+        Path(str(socket) + ".ctrl").unlink(missing_ok=True)
+
+    try:
+        start()
+        # Low PBKDF cost is confined to this disposable test image.
+        run(["cryptsetup", "luksFormat", "--batch-mode", "--type", "luks2",
+             "--pbkdf", "pbkdf2", "--pbkdf-force-iterations", "1000",
+             f"--key-file={key}", str(image)])
+        password_slot = metadata()["keyslots"]["0"]
+        enroll("")
+        assert tpm_tokens()[0]["tpm2-pcrs"] == []
+        extend(14, "3")
+        enroll("", unlock_tpm=True)
+        print("PASS: legacy unbound enrollment ignores changed PCR state", flush=True)
+
+        stop()
+        start()
+        recover()
+        enroll("7+14")
+        assert len(tpm_tokens()) == 1 and tpm_tokens()[0]["tpm2-pcrs"] == [7, 14]
+        assert metadata()["keyslots"]["0"] == password_slot
+        enroll("7+14", unlock_tpm=True)
+        print("PASS: explicit migration replaces the legacy TPM slot and preserves recovery", flush=True)
+
+        previous = metadata()
+        enroll("7+14", credential=bad_key, succeeds=False)
+        assert metadata() == previous
+        print("PASS: failed authorization preserves the existing enrollment", flush=True)
+
+        previous = metadata()
+        enroll("7+14", tpm_device=f"swtpm:path={root / 'unavailable.sock'}", succeeds=False)
+        assert metadata() == previous
+        recover()
+        print("PASS: failed new TPM enrollment preserves the working TPM and recovery slots", flush=True)
+
+        for pcr in (7, 14):
+            previous = metadata()
+            extend(pcr, "4")
+            result = enroll("7+14", unlock_tpm=True, succeeds=False)
+            assert any(word in result.stderr.lower() for word in ("pcr", "policy")), result.stderr
+            assert metadata() == previous
+            recover()
+            stop()
+            start()
+            enroll("7+14", unlock_tpm=True)
+            recover()
+            print(f"PASS: PCR {pcr} change rejects TPM unlock, recovery works, restored state unlocks after vTPM restart", flush=True)
+
+        run(["systemd-cryptenroll", "--wipe-slot=tpm2", str(image)])
+        assert tpm_tokens() == []
+        recover()
+        assert metadata()["keyslots"]["0"] == password_slot
+        print("PASS: disabling TPM enrollment retains the independent recovery credential", flush=True)
+    finally:
+        stop()
+        server_log.close()
