@@ -130,6 +130,9 @@ equivalents, pinned to full commit hashes and tracked by Dependabot. Mkosi has
 no hardened action in the catalog: a local setup action fetches its pinned
 v27.1 CLI through Chainguard checkout and installs the Ubuntu prerequisites.
 Review and update that source pin explicitly when upgrading mkosi.
+Guardener's [Hardened Actions review](https://www.chainguard.dev/docs/chainguard/guardener/github/actions-security)
+is enabled through `.chainguard/actions.yaml` to flag workflow references with
+Chainguard replacements in pull request recommendations.
 The signing secret is only exposed to publishing steps.
 
 ## Upstream And Licensing
