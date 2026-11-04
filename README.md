@@ -13,7 +13,6 @@ Astral identity.
 - Rootless Podman with Docker CLI compatibility.
 - `docker compose` backed by `podman-compose`, with the Podman user socket
   enabled for Docker API-compatible tools.
-- Visual Studio Code from Microsoft's official RPM repository.
 - Virtual Machine Manager with a system QEMU/KVM backend and default NAT
   networking.
 - Integrated wallpapers, logos, and default dotfiles. This repository has no

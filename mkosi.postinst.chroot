@@ -11,6 +11,8 @@ stat /usr/libexec/astral/firmware-update-check
 test -x /usr/libexec/astral/update-health
 test -x /usr/libexec/astral/update-user-setup
 test -x /usr/libexec/astral/composefs-remount
+# thermald's RAPL controller overrides the per-mode power limits in astral-* TuneD profiles.
+test ! -e /usr/lib/systemd/system/thermald.service
 grep -Fx 'L+ /etc/greetd/config.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 grep -Fx 'C+ /var/lib/noctalia-greeter/greeter.toml 0640 greeter greeter - /usr/share/astral/noctalia-greeter.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 grep -Fx 'ConditionFileIsExecutable=/usr/bin/noctalia' /usr/lib/systemd/user/astral-sync-noctalia-greeter.service
@@ -38,6 +40,8 @@ command -v pkexec
 
 install -d /usr/share/astral/
 sed --sandbox -i -e '/gnome_keyring.so/ s/-auth/auth/ ; /gnome_keyring.so/ s/-session/session/' /etc/pam.d/greetd
+# geoclue's demo agent only exists for desktops without their own agent prompt; with no agent geoclue still serves configured apps
+rm -f /etc/xdg/autostart/geoclue-demo-agent.desktop
 install -d /usr/share/bash-completion/completions /usr/share/zsh/site-functions /usr/share/fish/vendor_completions.d/
 just --completions bash | sed -E 's/([\(_" ])just/\1ajust/g' > /usr/share/bash-completion/completions/ajust
 just --completions zsh | sed -E 's/([\(_" ])just/\1ajust/g' > /usr/share/zsh/site-functions/_ajust
