@@ -142,6 +142,11 @@ is enabled through `.chainguard/actions.yaml` to flag workflow references with
 Chainguard replacements in pull request recommendations.
 The signing secret is only exposed to publishing steps.
 
+TPM disk auto-unlock is configured explicitly with `ajust toggle-tpm2`.
+The setup helper requires Secure Boot/shim measurements and a verified recovery
+credential before enrolling PCRs 7+14. See the [TPM recovery and validation guide](docs/tpm-unlock.md)
+before replacing an existing enrollment.
+
 ## Upstream And Licensing
 
 Astral is derived from
