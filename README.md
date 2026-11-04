@@ -13,7 +13,6 @@ Astral identity.
 - Rootless Podman with Docker CLI compatibility.
 - `docker compose` backed by `podman-compose`, with the Podman user socket
   enabled for Docker API-compatible tools.
-- Visual Studio Code from Microsoft's official RPM repository.
 - Virtual Machine Manager with a system QEMU/KVM backend and default NAT
   networking.
 - Integrated wallpapers, logos, and default dotfiles. This repository has no
@@ -84,6 +83,15 @@ Install `mkosi`, `just`, and Podman, then build the standard bootc image:
 just build
 ```
 
+Build preparation checks downloaded tools against the versions and SHA-256 hashes
+in `build-scripts/tools.lock`, including cached downloads. Homebrew's bootstrap
+image is verified with the [upstream signing key](https://github.com/ublue-os/brew/blob/main/cosign.pub),
+vendored as `build-scripts/ublue-brew.pub`, before
+extracting the same immutable digest. The optional Jackrabbit profile also
+verifies its kernel image's signing workflow and its audio firmware checksum.
+Update tool versions and hashes together from the upstream release checksum
+manifests; signing-key changes require a reviewed update to the vendored key.
+
 GitHub Actions publishes the multi-architecture image to GHCR on pushes to the
 default branch and daily so Fedora security updates land without a manual commit.
 The scheduled job refreshes its workflow activity to prevent GitHub's inactivity
@@ -116,8 +124,15 @@ requires signatures matching the vendored `astral.pub` key for images under
 Astral. Each published manifest also receives GitHub-hosted SLSA build
 provenance tied to its immutable digest. After publish, CI verifies the
 Sigstore signature against `astral.pub` and the provenance attestation before
-the workflow succeeds. Workflow actions are pinned to full commit hashes, and
-the signing secret is only exposed to publishing steps.
+the workflow succeeds. External workflow actions use Chainguard's hardened
+equivalents, pinned to full commit hashes and tracked by Dependabot. Mkosi has
+no hardened action in the catalog: a local setup action fetches its pinned
+v27.1 CLI through Chainguard checkout and installs the Ubuntu prerequisites.
+Review and update that source pin explicitly when upgrading mkosi.
+Guardener's [Hardened Actions review](https://www.chainguard.dev/docs/chainguard/guardener/github/actions-security)
+is enabled through `.chainguard/actions.yaml` to flag workflow references with
+Chainguard replacements in pull request recommendations.
+The signing secret is only exposed to publishing steps.
 
 ## Upstream And Licensing
 

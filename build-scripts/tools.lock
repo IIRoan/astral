@@ -1,0 +1,8 @@
+# tool architecture version asset sha256
+# Hashes from the corresponding upstream release's checksum manifest.
+crane x86_64 v0.22.1 go-containerregistry_Linux_x86_64.tar.gz 0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0
+crane aarch64 v0.22.1 go-containerregistry_Linux_arm64.tar.gz 898c0cff975f898a33e8c4580bdafb0e7c02c7faa33374e946762f97c4ab7110
+cosign x86_64 v2.6.5 cosign-linux-amd64 c3b4f5410e608af03a5eb0aaac84a4313d8da131248e08ff1759ac70c79d1644
+cosign aarch64 v2.6.5 cosign-linux-arm64 426193b4c5da4d4d643e822f48fe0cc8a476ca1782a272704831f5a0cef716d7
+oras x86_64 v1.3.6 oras_1.3.6_linux_amd64.tar.gz 66fb0ad7206f3f6fa77ed5b552049d364ccf4b50b1684554f731f76302b52ca0
+oras aarch64 v1.3.6 oras_1.3.6_linux_arm64.tar.gz b84269e78dfc2d5329a4aab373da3200de95e6c138338cf6c66c10c0a3f248c1

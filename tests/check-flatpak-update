@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+
+# Run inside the disposable image container, using only a temporary user install.
+set -euo pipefail
+
+work="$(mktemp -d)"
+server=""
+cleanup() {
+    if [ -n "$server" ]; then
+        kill "$server" 2>/dev/null || :
+        wait "$server" 2>/dev/null || :
+    fi
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+export XDG_DATA_HOME="$work/data" XDG_CONFIG_HOME="$work/config" XDG_CACHE_HOME="$work/cache"
+mkdir -p "$work/app/files/share/update-check" "$work/app/files/bin"
+architecture="$(flatpak --default-arch)"
+application=org.astral.UpdateCheck
+cat > "$work/app/metadata" <<EOF
+[Application]
+name=$application
+runtime=org.astral.UpdateCheck.Platform/$architecture/stable
+sdk=org.astral.UpdateCheck.Sdk/$architecture/stable
+command=update-check
+EOF
+printf '#!/bin/sh\nexit 0\n' > "$work/app/files/bin/update-check"
+chmod 0755 "$work/app/files/bin/update-check"
+flatpak build-finish "$work/app"
+
+export_version() {
+    python3 - "$work/app/files/share/update-check" "$1" <<'PY'
+from pathlib import Path
+import sys
+
+directory, version = Path(sys.argv[1]), sys.argv[2]
+(directory / "version").write_text(version)
+for number in range(256):
+    (directory / str(number)).write_bytes(f"{version}-{number}".encode() * 1024)
+PY
+    flatpak build-export --arch="$architecture" "$work/repo" "$work/app" stable
+}
+
+export_version 1
+python3 - "$work/repo" "$work/port" <<'PY' > "$work/http.log" 2>&1 &
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+import sys
+
+class UncachedHandler(SimpleHTTPRequestHandler):
+    def send_head(self):
+        # Two exports can share a timestamp; always serve the latest summary.
+        if "If-Modified-Since" in self.headers:
+            del self.headers["If-Modified-Since"]
+        return super().send_head()
+
+handler = partial(UncachedHandler, directory=sys.argv[1])
+with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+    Path(sys.argv[2]).write_text(str(server.server_port))
+    server.serve_forever()
+PY
+server=$!
+for _ in {1..100}; do
+    [ -s "$work/port" ] && break
+    kill -0 "$server"
+    sleep 0.1
+done
+test -s "$work/port"
+flatpak --user remote-add --no-gpg-verify update-check "http://127.0.0.1:$(cat "$work/port")"
+flatpak --user install --noninteractive --no-deps --no-related update-check "$application"
+before="$(flatpak --user info --show-commit "$application")"
+
+export_version 2
+flatpak build-update-repo --generate-static-deltas --static-delta-jobs=2 "$work/repo"
+flatpak --user update --noninteractive --no-deps --no-related "$application"
+after="$(flatpak --user info --show-commit "$application")"
+test "$before" != "$after"
+location="$(flatpak --user info --show-location "$application")"
+test "$(cat "$location/files/share/update-check/version")" = 2
+# Require a successful delta-part transfer, rather than a loose-object fallback.
+grep -Eq 'GET /deltas/.*/[0-9]+ HTTP/[^ ]+" 200' "$work/http.log"
+rpm -q ostree ostree-libs flatpak
+printf '%s\n' 'Flatpak install and static-delta update succeeded.'

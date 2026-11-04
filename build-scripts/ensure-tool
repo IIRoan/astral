@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+# Reinstall from a verified artifact even when an older executable is cached.
+set -euo pipefail
+
+: "${SRCDIR:?SRCDIR must point to the source checkout}"
+tool="${1:?Specify crane, cosign or oras}"
+case "$tool" in
+    crane) repository=google/go-containerregistry ;;
+    cosign) repository=sigstore/cosign ;;
+    oras) repository=oras-project/oras ;;
+    *) echo "Unsupported build tool: $tool" >&2; exit 1 ;;
+esac
+
+architecture="$(uname -m)"
+read -r version asset checksum < <(
+    awk -v tool="$tool" -v arch="$architecture" \
+        '$1 == tool && $2 == arch {print $3, $4, $5}' "$SRCDIR/build-scripts/tools.lock"
+) || { echo "No pinned $tool artifact for $architecture" >&2; exit 1; }
+
+cache="$SRCDIR/cache/build-tools"
+mkdir -p "$cache"
+work="$(mktemp -d "$cache/.$tool.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
+artifact="$cache/$tool-$version-$architecture"
+
+if [ -f "$artifact" ]; then
+    cp "$artifact" "$work/artifact"
+else
+    curl --fail --show-error --silent --location --retry 3 \
+        --proto '=https' --proto-redir '=https' \
+        "https://github.com/$repository/releases/download/$version/$asset" \
+        --output "$work/artifact"
+fi
+
+printf '%s  %s\n' "$checksum" "$work/artifact" | sha256sum --check --strict -
+if [ ! -f "$artifact" ]; then
+    cp "$work/artifact" "$work/cached"
+    mv -T "$work/cached" "$artifact"
+fi
+
+if [ "$tool" = cosign ]; then
+    install -m 0755 "$work/artifact" "$work/installed"
+else
+    tar -xzf "$work/artifact" -C "$work" --no-same-owner --no-same-permissions "$tool"
+    install -m 0755 "$work/$tool" "$work/installed"
+fi
+mv -fT "$work/installed" "$SRCDIR/cache/$tool"
