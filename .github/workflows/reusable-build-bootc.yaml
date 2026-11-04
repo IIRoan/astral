@@ -26,6 +26,11 @@ on:
         required: false
         type: boolean
         default: true
+      candidate:
+        description: Publish only isolated candidate tags during a manual run
+        required: false
+        type: boolean
+        default: false
       profiles:
         description: "Extra mkosi profiles to use"
         required: false
@@ -39,6 +44,10 @@ on:
       SIGNING_SECRET:
         description: "The private key used to sign the image"
         required: false
+    outputs:
+      digest:
+        description: Verified multi-architecture image digest
+        value: ${{ jobs.manifest.outputs.digest }}
 
 env:
   DEFAULT_TAG: "${{ inputs.default-tag }}"
@@ -57,6 +66,30 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Validate publishing context
+        env:
+          PUBLISH_IMAGE: ${{ inputs.publish }}
+          CANDIDATE_IMAGE: ${{ inputs.candidate }}
+          IMAGE_TAG: ${{ inputs.default-tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          if [[ "$PUBLISH_IMAGE" != true ]]; then
+            exit 0
+          fi
+          if [[ "$CANDIDATE_IMAGE" == true ]]; then
+            [[ "$EVENT_NAME" == workflow_dispatch ]]
+            [[ "$SOURCE_REF" == refs/heads/* ]]
+            [[ "$IMAGE_TAG" == "candidate-${RUN_ID}-${RUN_ATTEMPT}" ]]
+          else
+            [[ "$SOURCE_REF" == "refs/heads/${DEFAULT_BRANCH}" ]]
+            [[ "$EVENT_NAME" == push || "$EVENT_NAME" == schedule || "$EVENT_NAME" == workflow_dispatch ]]
+          fi
+
       - name: Set matrix
         id: set-matrix
         env:
@@ -258,25 +291,26 @@ jobs:
         if: inputs.publish
         id: metadata
         with:
+          flavor: latest=false
           tags: |
             type=raw,value=${{ env.DEFAULT_TAG }}
-            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}
+            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }},enable=${{ ! inputs.candidate }}
             type=raw,value=${{ env.DEFAULT_TAG }}-${{ github.sha }}
-            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}-${{ github.sha }}
-            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}
-            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}.{{date 'YYYYMMDD'}}
-            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}-${{ github.sha }}
-            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}.{{date 'YYYYMMDD'}}-${{ github.sha }}
-            type=raw,value={{ date 'YYYYMMDD'}},enable=${{ env.DEFAULT_TAG == 'latest' }}
-            type=ref,event=pr
-            type=sha,enable=${{ github.event_name == 'pull_request' }}
+            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}-${{ github.sha }},enable=${{ ! inputs.candidate }}
+            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}},enable=${{ ! inputs.candidate }}
+            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}.{{date 'YYYYMMDD'}},enable=${{ ! inputs.candidate }}
+            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}-${{ github.sha }},enable=${{ ! inputs.candidate }}
+            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}.{{date 'YYYYMMDD'}}-${{ github.sha }},enable=${{ ! inputs.candidate }}
+            type=raw,value={{ date 'YYYYMMDD'}},enable=${{ ! inputs.candidate && env.DEFAULT_TAG == 'latest' }}
+            type=ref,event=pr,enable=${{ ! inputs.candidate }}
+            type=sha,enable=${{ ! inputs.candidate && github.event_name == 'pull_request' }}
           labels: |
             containers.bootc=1
             io.artifacthub.package.deprecated=false
             io.artifacthub.package.keywords=${{ env.IMAGE_KEYWORDS }}
             io.artifacthub.package.license=${{ env.IMAGE_LICENSE }}
             io.artifacthub.package.logo-url=${{ env.IMAGE_LOGO_URL }}
-            io.artifacthub.package.prerelease=false
+            io.artifacthub.package.prerelease=${{ inputs.candidate }}
             io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/README.md
             org.opencontainers.image.created=${{ steps.date.outputs.date }}
             org.opencontainers.image.description=${{ env.IMAGE_DESC }}
@@ -315,9 +349,15 @@ jobs:
           LABELS: ${{ steps.metadata.outputs.labels }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
           TAGS: ${{ steps.metadata.outputs.tags }}
+          CANDIDATE_IMAGE: ${{ inputs.candidate }}
         run: |
           set -euo pipefail
           : "${SIGNING_SECRET:?SIGNING_SECRET must be configured when publishing}"
+          if [[ "$CANDIDATE_IMAGE" == true ]]; then
+            while IFS= read -r TAG; do
+              [[ "$TAG" == "$DEFAULT_TAG" || "$TAG" == "${DEFAULT_TAG}-${GITHUB_SHA}" ]]
+            done <<< "$TAGS"
+          fi
           sudo install -d -m 0755 "/etc/containers/registries.d/"
           printf 'docker:\n  %s:\n    use-sigstore-attachments: true\n' "${IMAGE_REGISTRY}" | sudo tee "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml" > /dev/null
           sudo chmod 0644 "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml"
@@ -415,4 +455,16 @@ jobs:
             --insecure-ignore-tlog=true \
             "${IMAGE_REF}"
 
-          gh attestation verify "oci://${IMAGE_REF}" --repo "${GITHUB_REPOSITORY}"
+          # The index and every native image must carry Astral's signature.
+          docker manifest inspect "$IMAGE_REF" > /tmp/published-index.json
+          for architecture in amd64 arm64; do
+            child_digest="$(jq -er --arg arch "$architecture" '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest] | if length == 1 then .[0] else error("missing or duplicate architecture") end' /tmp/published-index.json)"
+            cosign verify --key astral.pub --insecure-ignore-tlog=true \
+              "${IMAGE_REGISTRY}/${IMAGE_NAME}@${child_digest}"
+          done
+
+          gh attestation verify "oci://${IMAGE_REF}" --repo "${GITHUB_REPOSITORY}" \
+            --source-digest "$GITHUB_SHA" --source-ref "$GITHUB_REF" \
+            --signer-digest "$GITHUB_SHA" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/reusable-build-bootc.yaml" \
+            --deny-self-hosted-runners

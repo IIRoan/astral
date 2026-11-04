@@ -55,6 +55,29 @@ policy when present and otherwise uses the vendor location.
 
 ## Validation and rollback
 
+PR runs build and test both images without publishing. `Verify published image`
+is therefore skipped there. The other skipped jobs are housekeeping:
+`keepalive` maintains scheduled workflows, `report` tracks production build
+failures, and Dependabot's `enable` only handles dependency PRs.
+
+To test the publishing path before merging, explicitly dispatch a candidate
+run on the reviewed branch:
+
+```bash
+gh workflow run build-standard-bootc.yaml --ref feat/fedora-45 -f candidate=true
+```
+
+This publishes only `candidate-RUN_ID-RUN_ATTEMPT` tags and their commit/architecture
+variants. It does not change `latest`, Fedora-version or date tags. Publishing
+guards reject PR events and candidate tags that do not belong to that run. The
+candidate run verifies signatures on the index and both architectures, and
+binds the index provenance to the exact source commit, branch and reusable
+workflow. Match the run's head SHA to the reviewed PR head before using it.
+
+Use the candidate's immutable digest for an isolated Fedora 44 → 45 VM upgrade,
+reboot and rollback rehearsal before promoting the change. A container test
+does not replace this boot test or validation on the target hardware.
+
 Before deployment, require the PR's maintenance tests, software-TPM recovery
 tests, both native image builds, bootc lint, Flatpak static-delta update checks,
 and Fedora 45 image compatibility checks to pass. The compatibility check runs
