@@ -11,6 +11,8 @@ stat /usr/libexec/astral/firmware-update-check
 test -x /usr/libexec/astral/update-health
 test -x /usr/libexec/astral/update-user-setup
 test -x /usr/libexec/astral/composefs-remount
+# thermald's RAPL controller overrides the per-mode power limits in astral-* TuneD profiles.
+test ! -e /usr/lib/systemd/system/thermald.service
 grep -Fx 'L+ /etc/greetd/config.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 grep -Fx 'C+ /var/lib/noctalia-greeter/greeter.toml 0640 greeter greeter - /usr/share/astral/noctalia-greeter.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 grep -Fx 'ConditionFileIsExecutable=/usr/bin/noctalia' /usr/lib/systemd/user/astral-sync-noctalia-greeter.service
