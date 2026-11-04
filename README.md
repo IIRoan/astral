@@ -125,8 +125,12 @@ requires signatures matching the vendored `astral.pub` key for images under
 Astral. Each published manifest also receives GitHub-hosted SLSA build
 provenance tied to its immutable digest. After publish, CI verifies the
 Sigstore signature against `astral.pub` and the provenance attestation before
-the workflow succeeds. Workflow actions are pinned to full commit hashes, and
-the signing secret is only exposed to publishing steps.
+the workflow succeeds. External workflow actions use Chainguard's hardened
+equivalents, pinned to full commit hashes and tracked by Dependabot. Mkosi has
+no hardened action in the catalog: a local setup action fetches its pinned
+v27.1 CLI through Chainguard checkout and installs the Ubuntu prerequisites.
+Review and update that source pin explicitly when upgrading mkosi.
+The signing secret is only exposed to publishing steps.
 
 ## Upstream And Licensing
 

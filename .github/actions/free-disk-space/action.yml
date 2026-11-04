@@ -1,0 +1,23 @@
+name: Prepare image build disk
+description: Free space on disposable Ubuntu runners while preserving build runtimes
+runs:
+  using: composite
+  steps:
+    - name: Check available disk space
+      id: space
+      shell: bash
+      run: |
+        available_kib=$(df -Pk / | awk 'NR == 2 {print $4}')
+        if (( available_kib < 64 * 1024 * 1024 )); then
+          echo 'cleanup=true' >> "$GITHUB_OUTPUT"
+        else
+          echo 'cleanup=false' >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Free disk space
+      if: steps.space.outputs.cleanup == 'true'
+      uses: chainguard-actions/jlumbroso-free-disk-space@681db05c7e0d9d3fbf2b213501aa9ed2b7df3a5e # v2.0.0
+      with:
+        preinstalled-runtimes: false
+        docker-images: false
+        swap-storage: true

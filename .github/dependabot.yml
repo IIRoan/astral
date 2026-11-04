@@ -1,7 +1,10 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    directories:
+      - /
+      - /.github/actions/free-disk-space
+      - /.github/actions/setup-mkosi
     schedule:
       interval: daily
       time: "06:17"
