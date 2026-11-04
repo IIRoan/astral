@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "mkosi.extra/usr/bin/luks-tpm2-autounlock"
 UUID = "11111111-2222-3333-4444-555555555555"
 SECRET = "test-only-recovery-secret"
+ENABLE = "Enable or replace TPM2 enrollment"
+DISABLE = "Disable TPM2 auto-unlock"
 STUB = r'''#!/usr/bin/python3
 import json, os, sys
 from pathlib import Path
@@ -27,7 +29,12 @@ elif name=='gum':
     count=Path(os.environ['PROMPT_COUNT'])
     i=int(count.read_text()) if count.exists() else 0
     count.write_text(str(i+1))
-    sys.exit(json.loads(os.environ.get('ANSWERS','[0,0,1]'))[i])
+    answer=json.loads(os.environ.get('ANSWERS','["Enable or replace TPM2 enrollment",0,"No PIN"]'))[i]
+    if args[0]=='choose' and isinstance(answer,str):
+        print(answer)
+        sys.exit(0)
+    assert isinstance(answer,int)
+    sys.exit(answer)
 elif name=='mokutil':
     print(os.environ.get('SECURE_BOOT','SecureBoot enabled'))
     sys.exit(int(os.environ.get('SECURE_BOOT_RC','0')))
@@ -105,14 +112,16 @@ class TpmUnlockTests(unittest.TestCase):
         self.assertEqual(self.calls("cryptsetup")[-1][0], "open")
 
     def test_pin_is_opt_in(self):
-        self.run_helper(ANSWERS="[0,0,0]")
+        self.run_helper(ANSWERS=json.dumps([ENABLE, 0, "Require a PIN"]))
         self.assertIn("--tpm2-with-pin=yes", self.calls("systemd-cryptenroll")[0])
 
     def test_cancel_at_each_prompt_does_not_change_enrollment(self):
-        for answers in ("[130]", "[0,1]", "[0,0,130]"):
+        for answers in ([1], [130], ["Cancel"], [ENABLE, 1], [ENABLE, 0, 1],
+                        [ENABLE, 0, 130], [ENABLE, 0, "Cancel"]):
             with self.subTest(answers=answers):
                 self.setUp()
-                self.run_helper(ANSWERS=answers)
+                self.run_helper(ANSWERS=json.dumps(answers))
+                self.assertEqual(len(self.calls("gum")), len(answers))
                 self.assertEqual(self.calls("systemd-cryptenroll"), [])
 
     def test_wrong_recovery_credential_or_agent_failure_does_not_enroll(self):
@@ -123,14 +132,14 @@ class TpmUnlockTests(unittest.TestCase):
                 self.assertEqual(self.calls("systemd-cryptenroll"), [])
 
     def test_disable_requires_recovery_but_not_working_secure_boot_or_tpm(self):
-        self.run_helper(ANSWERS="[1,0]", SECURE_BOOT="SecureBoot disabled", PCRS="[]")
+        self.run_helper(ANSWERS=json.dumps([DISABLE, 0]), SECURE_BOOT="SecureBoot disabled", PCRS="[]")
         self.assertEqual(self.calls("systemd-cryptenroll"), [["--wipe-slot=tpm2", str(self.device)]])
         self.assertEqual(self.calls("mokutil"), [])
         self.assertEqual(self.calls("systemd-analyze"), [])
         self.assertEqual(self.calls("cryptsetup")[-1][0], "open")
 
     def test_disable_with_bad_recovery_credential_keeps_tpm(self):
-        self.run_helper(expected=1, ANSWERS="[1,0]", SECRET_INPUT="wrong")
+        self.run_helper(expected=1, ANSWERS=json.dumps([DISABLE, 0]), SECRET_INPUT="wrong")
         self.assertEqual(self.calls("systemd-cryptenroll"), [])
 
     def test_secure_boot_disabled_shim_validation_disabled_or_query_error_blocks_enrollment(self):

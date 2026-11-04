@@ -56,8 +56,10 @@ ajust toggle-tpm2
 luks-tpm2-autounlock --device "$device"
 ```
 
-Select **Enable**, confirm recovery readiness, and enter the recovery credential
-for the independent unlock check. Choose whether to require a TPM PIN.
+Select **Enable or replace TPM2 enrollment**, confirm recovery readiness, and
+enter the recovery credential for the independent unlock check. Choose whether
+to require a TPM PIN. Escape and the default **Cancel** choice leave enrollment
+unchanged, including at the PIN menu.
 `systemd-cryptenroll` then asks for the credential again to authorize enrollment.
 The replacement removes legacy unbound TPM slots only after successful
 enrollment, while preserving the independent password/recovery slots.
@@ -89,8 +91,8 @@ policy changes.
 5. Install a normal Astral image update and verify another reboot. Keep the
    recovery credential ready for future firmware, dbx, and MOK updates.
 
-For rollback to passphrase unlocking, choose **Disable** in the helper. This
-also requires successful independent recovery verification before wiping TPM
+For rollback to passphrase unlocking, choose **Disable TPM2 auto-unlock** in the
+helper. This also requires successful independent recovery verification before wiping TPM
 slots. It works when Secure Boot or TPM auto-unlock is unavailable.
 
 ## Automated validation

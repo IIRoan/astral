@@ -49,11 +49,15 @@ if ! crypt_disk="$(realpath -e -- "$candidate")" || [[ ! -b "$crypt_disk" && ! -
   exit 1
 fi
 
-choice=0
-gum confirm --affirmative=Enable --negative=Disable "TPM2 auto-unlock for $crypt_disk" || choice=$?
-case "$choice" in
-  0|1) ;;
-  *) exit 0 ;;
+if ! action="$(gum choose --header="TPM2 auto-unlock for $crypt_disk" \
+  Cancel 'Enable or replace TPM2 enrollment' 'Disable TPM2 auto-unlock')"; then
+  exit 0
+fi
+case "$action" in
+  'Enable or replace TPM2 enrollment') choice=0 ;;
+  'Disable TPM2 auto-unlock') choice=1 ;;
+  Cancel) exit 0 ;;
+  *) echo 'Unexpected TPM action selection.' >&2; exit 1 ;;
 esac
 
 echo 'Keep a working LUKS passphrase or recovery key available for boot recovery.'
@@ -106,12 +110,14 @@ if [[ "$choice" == 1 ]]; then
   exit 0
 fi
 
-pin_choice=0
-gum confirm --default=false 'Require a PIN in addition to PCRs 7+14?' || pin_choice=$?
+if ! pin_choice="$(gum choose --header='PIN policy for PCRs 7+14' Cancel 'Require a PIN' 'No PIN')"; then
+  exit 0
+fi
 case "$pin_choice" in
-  0) pin_arg=--tpm2-with-pin=yes ;;
-  1) pin_arg=--tpm2-with-pin=no ;;
-  *) exit 0 ;;
+  'Require a PIN') pin_arg=--tpm2-with-pin=yes ;;
+  'No PIN') pin_arg=--tpm2-with-pin=no ;;
+  Cancel) exit 0 ;;
+  *) echo 'Unexpected PIN selection.' >&2; exit 1 ;;
 esac
 
 # systemd enrolls successfully before wiping old TPM slots; passphrase and
