@@ -52,6 +52,10 @@ overrides in `/etc/niri/local.kdl`. Curated Noctalia defaults live in
 `~/.config/noctalia/config.toml`; GUI changes are stored separately by
 Noctalia under `~/.local/state/noctalia/`.
 
+The [display-color profile](docs/display-color.md) preserves near-white detail
+on the verified Predator XB253Q unit using an unprivileged, per-monitor SDR
+white-level adjustment. It includes override and disable instructions.
+
 ## Containers
 
 Both command styles use Podman:

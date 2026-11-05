@@ -1,7 +1,6 @@
 #!/bin/bash
 set -xeuo pipefail
 
-bash "$SRCDIR/build-scripts/build-display-color"
 /usr/libexec/astral/display-color --help
 
 install -Dpm0644 -t /usr/share/flatpak/remotes.d/ "$SRCDIR/cache/flathub.flatpakrepo"

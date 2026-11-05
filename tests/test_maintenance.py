@@ -42,7 +42,9 @@ if operation == 'show':
     print(data.get(prop, {'ActiveState': 'inactive', 'Result': 'success', 'ConditionResult': 'yes'}.get(prop, '')))
 elif operation == 'enable':
     with open(os.environ['NOTIFICATIONS'], 'a') as f:
-        f.write('enable timers\\n')
+        f.write(json.dumps(args) + '\\n')
+    if os.environ.get('SETUP_FAIL_UNIT') in args:
+        sys.exit(1)
 """)
         self.stub("rpm-ostree", """
 import os, sys
@@ -169,7 +171,40 @@ sys.exit(int(os.environ.get('FIRMWARE_RC', '0')))
     def test_user_timer_setup_respects_later_disable_choices(self):
         self.run_helper("update-user-setup")
         self.run_helper("update-user-setup")
-        self.assertEqual(self.notifications(), ["enable timers"])
+        self.assertEqual([json.loads(line) for line in self.notifications()], [
+            ["enable", "--now", "astral-flatpak-update.timer", "astral-update-health.timer"],
+            ["enable", "--now", "astral-display-color.service"],
+        ])
+
+    def test_display_color_migrates_users_with_existing_timer_marker_once(self):
+        state = self.tmp / "state/astral"
+        state.mkdir(parents=True)
+        (state / "update-timers-v1").touch()
+        self.run_helper("update-user-setup")
+        self.run_helper("update-user-setup")
+        self.assertEqual([json.loads(line) for line in self.notifications()], [
+            ["enable", "--now", "astral-display-color.service"],
+        ])
+        self.assertTrue((state / "display-color-v1").exists())
+
+    def test_display_color_migration_respects_an_existing_mask(self):
+        self.env["UNITS"] = json.dumps({"user:astral-display-color.service": {"enabled": "masked"}})
+        self.run_helper("update-user-setup")
+        self.assertEqual([json.loads(line) for line in self.notifications()], [
+            ["enable", "--now", "astral-flatpak-update.timer", "astral-update-health.timer"],
+        ])
+
+    def test_failed_color_setup_is_retried_without_reenabling_timers(self):
+        self.env["SETUP_FAIL_UNIT"] = "astral-display-color.service"
+        self.run_helper("update-user-setup", expected=1)
+        self.assertFalse((self.tmp / "state/astral/display-color-v1").exists())
+        del self.env["SETUP_FAIL_UNIT"]
+        self.run_helper("update-user-setup")
+        self.assertEqual([json.loads(line) for line in self.notifications()], [
+            ["enable", "--now", "astral-flatpak-update.timer", "astral-update-health.timer"],
+            ["enable", "--now", "astral-display-color.service"],
+            ["enable", "--now", "astral-display-color.service"],
+        ])
 
     def pending_firmware(self):
         self.env["FIRMWARE"] = json.dumps({"Devices": [{

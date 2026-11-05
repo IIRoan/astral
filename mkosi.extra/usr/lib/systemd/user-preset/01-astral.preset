@@ -3,6 +3,7 @@ enable astral-flatpak-update.timer
 enable astral-update-health.timer
 enable astral-update-user-setup.timer
 enable astral-sync-noctalia-greeter.service
+enable astral-display-color.service
 enable chezmoi-init.service
 enable chezmoi-update.timer
 enable fcitx5.service

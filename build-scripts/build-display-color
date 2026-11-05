@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source_dir="${SRCDIR:?}/build-scripts/display-color"
+build_dir="$(mktemp -d)"
+trap 'rm -rf "$build_dir"' EXIT
+wayland-scanner client-header "$source_dir/wlr-gamma-control-unstable-v1.xml" \
+    "$build_dir/wlr-gamma-control-unstable-v1-client-protocol.h"
+wayland-scanner private-code "$source_dir/wlr-gamma-control-unstable-v1.xml" "$build_dir/gamma-protocol.c"
+read -r -a wayland_flags <<< "$(pkg-config --cflags --libs wayland-client)"
+"${CC:-cc}" -std=c11 -D_GNU_SOURCE -O2 -Wall -Wextra -Werror \
+    -I "$build_dir" "$source_dir/display-color.c" "$build_dir/gamma-protocol.c" \
+    "${wayland_flags[@]}" -lm -o "$build_dir/display-color"
+install -Dpm0755 "$build_dir/display-color" "${DESTDIR:-}/usr/libexec/astral/display-color"

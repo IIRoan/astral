@@ -45,6 +45,10 @@ jobs:
       contents: read
     steps:
       - uses: chainguard-actions/actions-checkout@37298d8de412b35988dd165ffae45f45b329d365 # v7.0.1
+      - name: Install native display-protocol test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libwayland-dev libwayland-bin
       - name: Check update and recovery behavior
         run: python3 -m unittest discover -s tests -v
       - name: Check greeter authorization boundaries
@@ -54,7 +58,8 @@ jobs:
           shellcheck mkosi.extra/usr/bin/luks-tpm2-autounlock \
             mkosi.extra/usr/libexec/astral/{update-health,update-user-setup,firmware-update-check,composefs-remount,sync-noctalia-greeter,prepare-tuned-ppd} \
             mkosi.profiles/brew/mkosi.extra/usr/libexec/astral/{brew-locked,install-brew-lock} \
-            build-scripts/ensure-tool mkosi.profiles/{brew,jackrabbit}/mkosi.prepare.chroot \
+            build-scripts/ensure-tool build-scripts/build-display-color mkosi.build.chroot \
+            mkosi.profiles/{brew,jackrabbit}/mkosi.prepare.chroot \
             tests/check-flatpak-update tests/check-fedora-upgrade tests/check-xwayland-popup
 
   validate_tpm:
