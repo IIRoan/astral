@@ -58,6 +58,8 @@ policy when present and otherwise uses the vendor location.
 Fedora 45 enforces TuneD's power-profile translation daemon with SELinux.
 Astral migrates its previous `/etc/tuned/ppd.conf` factory symlink to a regular
 configuration file and restores the policy labels on persistent TuneD logs.
+It also creates and labels the log directory before the power-profile service
+starts, preventing a fresh-boot race with TuneD's own directory creation.
 Administrator configuration files are preserved. SELinux remains enforcing.
 
 The legacy rechunker group repair remains enabled. Its final ownership repair
@@ -87,7 +89,7 @@ and upstream main at `9412ad63c44b60132fab1d0c270fc6bdea64a8c1`.
 | Official Tailscale stable repository | Included with package and repository metadata GPG checks and upstream's repository priority. |
 | Terra repository cleanup and metadata signatures | Obsolete multimedia repository removed; Terra metadata and packages require GPG verification. |
 | DMS package and repository changes | Astral keeps its Noctalia desktop. |
-| Newly listed packages previously removed from Astral | Deliberate Astral removals, including Valent, Orca, IBus and mobile broadband services, stay removed. |
+| Newly listed packages previously removed from Astral | Removed entries, including Valent, Orca, IBus and mobile broadband tools, are not reintroduced as direct dependencies. |
 | Development mkosi revision | Astral retains pinned stable mkosi 27.1, tested against both Fedora 45 architectures. |
 | Jackrabbit bootstrap `--noverify` workaround | Astral retains signature verification; the gaming profile is outside the standard image. |
 

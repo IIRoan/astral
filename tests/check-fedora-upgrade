@@ -82,6 +82,12 @@ printf 'PASS: fresh Anaconda spool initialization and CUPS directory permissions
 # mapping rather than the package's stock mapping.
 test ! -L /etc/tuned/ppd.conf
 cmp /usr/share/astral/tuned/ppd.conf /etc/tuned/ppd.conf
+test ! -e /var/log/tuned
+/usr/libexec/astral/prepare-tuned-ppd
+test "$(stat -c '%a %u %g' /var/log/tuned)" = '755 0 0'
+printf 'existing-tuned-log' > /var/log/tuned/astral-check
+/usr/libexec/astral/prepare-tuned-ppd
+test "$(cat /var/log/tuned/astral-check)" = existing-tuned-log
 rm /etc/tuned/ppd.conf
 ln -s /usr/share/astral/tuned/ppd.conf /etc/tuned/ppd.conf
 /usr/libexec/astral/prepare-tuned-ppd
