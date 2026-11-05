@@ -1,9 +1,22 @@
 {
     "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+    // Logo colors follow assets/logos/logo-astral.svg: grey back ring, white front ring, teal -> cream -> gold star.
+    "logo": {
+        "source": "/usr/share/astral/astral.txt",
+        "color": {
+            "1": "#8c90a3",
+            "2": "default",
+            "3": "#6ec8d6",
+            "4": "#b1dcdc",
+            "5": "#f4f0e2",
+            "6": "#ebd3a6",
+            "7": "#e2b56a"
+        }
+    },
     "display": {
         "separator": "  ",
         "color": {
-            "keys": "light_blue"
+            "keys": "#6ec8d6"
         },
     },
     "modules": [
@@ -11,9 +24,9 @@
             "type": "title",
             "key": " ",
             "color": {
-                "user": "light_blue",
+                "user": "#6ec8d6",
                 "at": "white",
-                "host": "magenta"
+                "host": "#e2b56a"
             }
         },
         "break",
