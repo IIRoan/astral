@@ -1,0 +1,10 @@
+[astral-xwayland-satellite]
+name=Fedora $releasever - $basearch - Xwayland Satellite fixes
+metalink=https://mirrors.fedoraproject.org/metalink?repo=updates-testing-f$releasever&arch=$basearch
+enabled=0
+includepkgs=xwayland-satellite
+type=rpm
+gpgcheck=1
+gpgkey=file:///usr/share/pki/rpm-gpg/RPM-GPG-KEY-fedora-$releasever-$basearch
+metadata_expire=6h
+skip_if_unavailable=False

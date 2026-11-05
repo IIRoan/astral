@@ -1,9 +1,16 @@
 #!/bin/bash
 set -xeuo pipefail
 
+bash "$SRCDIR/build-scripts/build-display-color"
+/usr/libexec/astral/display-color --help
+
 install -Dpm0644 -t /usr/share/flatpak/remotes.d/ "$SRCDIR/cache/flathub.flatpakrepo"
 
 niri --version | grep -i -E "niri [[:digit:]]*\.[[:digit:]]*"
+# Satellite 0.8.2 steals focus from Steam/Wine override-redirect popups.
+satellite_version="$(rpm -q --qf '%{VERSION}' xwayland-satellite)"
+rpm --define "astral_satellite_version $satellite_version" --eval \
+    '%{lua:if rpm.vercmp(rpm.expand("%{astral_satellite_version}"), "0.8.3") < 0 then error("Xwayland Satellite 0.8.3 or newer is required") end}'
 niri validate --config /usr/share/factory/etc/niri/config.kdl
 noctalia-greeter sessions | grep -Fqx Niri
 stat /usr/libexec/astral/noctalia-greeter-guard
@@ -83,7 +90,7 @@ PRETTY_NAME="${IMAGE_NAME^}"
 FANCY_NAME="\033[0;38:2:252:186:3;1;49m⸭\033[0;38:2:252:186:3;49m ${IMAGE_NAME^} \033[0m"
 VERSION="$VERSION"
 VERSION_ID="$VERSION_ID"
-VERSION_CODENAME="Pibble"
+VERSION_CODENAME="Cute Chinese Frog"
 ANSI_COLOR="38:2:252:186:3;1;49"
 ANSI_COLOR_REVERSE="48;2;252;186;3;1;30"
 LOGO="${IMAGE_NAME}"

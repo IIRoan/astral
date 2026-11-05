@@ -40,6 +40,12 @@ whether to keep it. Preserve any deliberate authentication changes.
 KMSCON is included on Fedora 45. Greetd continues to reserve tty1 and conflicts
 with `kmsconvt@tty1.service`; other virtual terminals remain available.
 
+Xwayland Satellite must be at least 0.8.3 to include the Steam/Wine popup-focus
+fix. While Fedora 45's stable repository still has 0.8.2, the build uses a
+separate Fedora updates-testing repository filtered to `xwayland-satellite`.
+RPM signatures remain required. The minimum version also permits newer stable
+packages; remove the temporary repository once stable Fedora carries the fix.
+
 The retired NetworkManager-vpnc plugin is removed. Migrate any saved Cisco
 IPsec VPN profiles to a supported alternative before upgrading; the separate
 `vpnc` command-line package remains available. See
@@ -95,6 +101,12 @@ and upstream main at `9412ad63c44b60132fab1d0c270fc6bdea64a8c1`.
 | Newly listed packages previously removed from Astral | Removed entries, including Valent, Orca, IBus and mobile broadband tools, are not reintroduced as direct dependencies. |
 | Development mkosi revision | Astral retains pinned stable mkosi 27.1, tested against both Fedora 45 architectures. |
 | Jackrabbit bootstrap `--noverify` workaround | Astral retains signature verification; the gaming profile is outside the standard image. |
+
+Astral also adopts upstream's ten parallel package downloads and Fastfetch's
+EROFS filtering. Fedora 45 uses upstream's `Cute Chinese Frog` release codename.
+The optional Jackrabbit profile selects the OGC kernel from mkosi's target
+release, with Rawhide resolved through the image's Fedora RPM macro. Kernel
+verification and extraction continue to use the same immutable digest.
 
 ## Candidate installer
 
@@ -175,6 +187,12 @@ inside disposable image containers and exercises real Podman policy lookup for
 fresh installations, existing factory links, and administrator overrides. It
 also checks the packaged greeter stack and Niri configuration; it does not
 exercise a graphical login or hardware boot.
+
+Both native image jobs also run a real popup-focus regression check in an
+isolated Niri session nested inside software-rendered, headless Weston. Regular
+new X11 windows must receive focus, while an override-redirect popup with
+`InputHint` set must preserve its parent's focus. Weston and the private D-Bus
+session tools are installed only in disposable test containers.
 
 The image checks also exercise TuneD configuration migration and administrator
 overrides, and reproduce the group-repair failure in an isolated mount namespace

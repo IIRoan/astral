@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+
+# Run in a disposable image container with Weston installed for this test.
+# Both compositors and all X11 clients use private sockets and software rendering.
+set -euo pipefail
+
+if [[ ! -e /run/.containerenv && ! -e /.dockerenv ]]; then
+    echo 'Run this check inside a disposable image container.' >&2
+    exit 1
+fi
+
+# Containers do not run the boot-time tmpfiles initialization.
+install -d -m 1777 /tmp/.X11-unix
+work="$(mktemp -d)"
+weston_pid=
+niri_pid=
+# shellcheck disable=SC2329 # Invoked by the EXIT trap.
+cleanup() {
+    for pid in "$niri_pid" "$weston_pid"; do
+        if [[ -n "$pid" ]]; then
+            kill -- "-$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
+    rm -rf "$work"
+}
+trap 'cleanup' EXIT
+export XDG_RUNTIME_DIR="$work/runtime" XDG_CONFIG_HOME="$work/config" XDG_CACHE_HOME="$work/cache"
+mkdir -m 0700 "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+export LIBGL_ALWAYS_SOFTWARE=1
+unset DISPLAY WAYLAND_DISPLAY NIRI_SOCKET DBUS_SESSION_BUS_ADDRESS
+
+test_script="$(dirname "$(realpath "$0")")/check-xwayland-popup.py"
+python3 - "$work" "$test_script" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+command = ["python3", sys.argv[2], "--result", str(root / "result.json")]
+(root / "niri.kdl").write_text('hotkey-overlay { skip-at-startup; }\nspawn-at-startup '
+                               + ' '.join(json.dumps(arg) for arg in command) + '\n')
+PY
+setsid weston --backend=headless --renderer=pixman --socket=astral-test --no-config \
+    --idle-time=0 --width=1280 --height=800 > "$work/weston.log" 2>&1 &
+weston_pid=$!
+for _ in {1..100}; do
+    test -S "$XDG_RUNTIME_DIR/astral-test" && break
+    kill -0 "$weston_pid" || { cat "$work/weston.log"; exit 1; }
+    sleep 0.1
+done
+test -S "$XDG_RUNTIME_DIR/astral-test"
+export WAYLAND_DISPLAY=astral-test
+setsid dbus-run-session -- niri --config "$work/niri.kdl" > "$work/niri.log" 2>&1 &
+niri_pid=$!
+for _ in {1..300}; do
+    if [[ -f "$work/result.json" ]]; then
+        cat "$work/result.json"
+        if python3 - "$work/result.json" <<'PY'
+import json
+import sys
+
+assert json.load(open(sys.argv[1]))['result'] == 'passed'
+PY
+        then
+            exit 0
+        fi
+        cat "$work/niri.log" "$work/weston.log"
+        exit 1
+    fi
+    if ! kill -0 "$niri_pid"; then
+        cat "$work/niri.log" "$work/weston.log"
+        exit 1
+    fi
+    sleep 0.2
+done
+cat "$work/niri.log" "$work/weston.log"
+echo 'Nested Niri/Xwayland popup test timed out.' >&2
+exit 1

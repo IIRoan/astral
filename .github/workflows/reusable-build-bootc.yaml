@@ -211,6 +211,13 @@ jobs:
           podman run --rm --privileged -i --entrypoint=/usr/bin/bash \
             "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" < tests/check-fedora-upgrade
 
+      - name: Check Xwayland popup focus in the built image
+        run: |
+          podman run --rm --privileged \
+            --volume "$GITHUB_WORKSPACE/tests:/usr/share/astral-tests:ro" \
+            --entrypoint=/usr/bin/bash "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" -c \
+            'dnf5 install -y --setopt=install_weak_deps=False weston dbus-daemon mesa-dri-drivers </dev/null && exec bash /usr/share/astral-tests/check-xwayland-popup'
+
       - name: Check TPM recovery with the built Fedora encryption tools
         run: |
           podman run --rm --privileged -i --entrypoint=/usr/bin/bash \

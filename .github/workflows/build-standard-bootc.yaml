@@ -55,7 +55,7 @@ jobs:
             mkosi.extra/usr/libexec/astral/{update-health,update-user-setup,firmware-update-check,composefs-remount,sync-noctalia-greeter,prepare-tuned-ppd} \
             mkosi.profiles/brew/mkosi.extra/usr/libexec/astral/{brew-locked,install-brew-lock} \
             build-scripts/ensure-tool mkosi.profiles/{brew,jackrabbit}/mkosi.prepare.chroot \
-            tests/check-flatpak-update tests/check-fedora-upgrade
+            tests/check-flatpak-update tests/check-fedora-upgrade tests/check-xwayland-popup
 
   validate_tpm:
     name: TPM policy and recovery checks
