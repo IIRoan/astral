@@ -454,7 +454,7 @@ jobs:
         uses: chainguard-actions/actions-checkout@37298d8de412b35988dd165ffae45f45b329d365 # v7.0.1
 
       - name: Install Cosign
-        uses: chainguard-actions/sigstore-cosign-installer@b87981cc3b0232e11827d1a8c6bcfa63d6cbd97a # v4.1.2
+        uses: chainguard-actions/sigstore-cosign-installer@634c2f027906fc3f2a3bb29ca604080e1b2eab86 # v4.1.3
         with:
           cosign-release: v2.6.5
 
