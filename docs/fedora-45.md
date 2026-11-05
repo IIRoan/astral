@@ -53,6 +53,17 @@ Compatibility links under `/usr/share/factory/etc/containers` keep Fedora 44's
 existing `/etc` factory links working. `ajust verify-image` checks the `/etc`
 policy when present and otherwise uses the vendor location.
 
+## Persistent service state
+
+Fedora 45 enforces TuneD's power-profile translation daemon with SELinux.
+Astral migrates its previous `/etc/tuned/ppd.conf` factory symlink to a regular
+configuration file and restores the policy labels on persistent TuneD logs.
+Administrator configuration files are preserved. SELinux remains enforcing.
+
+The legacy rechunker group repair remains enabled. Its final ownership repair
+only processes writable `/etc`, `/var`, `/run` and `/tmp` paths, avoiding a
+Fedora 45 tmpfiles rule that attempts to change the immutable root directory.
+
 ## Validation and rollback
 
 PR runs build and test both images without publishing. `Verify published image`
@@ -85,6 +96,10 @@ inside disposable image containers and exercises real Podman policy lookup for
 fresh installations, existing factory links, and administrator overrides. It
 also checks the packaged greeter stack and Niri configuration; it does not
 exercise a graphical login or hardware boot.
+
+The image checks also exercise TuneD configuration migration and administrator
+overrides, and reproduce the group-repair failure in an isolated mount namespace
+with a read-only root and writable state directories.
 
 Both architecture builds also run the disposable LUKS/vTPM recovery test with
 the image's own systemd and cryptsetup. Software-TPM test tools are installed

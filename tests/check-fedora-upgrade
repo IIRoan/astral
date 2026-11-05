@@ -30,6 +30,72 @@ noctalia-greeter sessions | grep -Fqx Niri
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+
+# Exercise the real migration helper, including a previous factory link and
+# an administrator's regular configuration. A fresh image must ship Astral's
+# mapping rather than the package's stock mapping.
+test ! -L /etc/tuned/ppd.conf
+cmp /usr/share/astral/tuned/ppd.conf /etc/tuned/ppd.conf
+rm /etc/tuned/ppd.conf
+ln -s /usr/share/astral/tuned/ppd.conf /etc/tuned/ppd.conf
+/usr/libexec/astral/prepare-tuned-ppd
+test ! -L /etc/tuned/ppd.conf
+cmp /usr/share/astral/tuned/ppd.conf /etc/tuned/ppd.conf
+printf '# administrator override\n' >> /etc/tuned/ppd.conf
+cp /etc/tuned/ppd.conf "$work/ppd-override.conf"
+/usr/libexec/astral/prepare-tuned-ppd
+cmp "$work/ppd-override.conf" /etc/tuned/ppd.conf
+rm /etc/tuned/ppd.conf
+ln -s "$work/ppd-override.conf" /etc/tuned/ppd.conf
+/usr/libexec/astral/prepare-tuned-ppd
+test "$(readlink /etc/tuned/ppd.conf)" = "$work/ppd-override.conf"
+cmp "$work/ppd-override.conf" /etc/tuned/ppd.conf
+
+# A read-only root with writable state reproduces the bootc failure. Execute
+# the packaged service's actual tmpfiles arguments, not a copy of that command.
+unshare --mount bash -s -- "$work" <<'MOUNT_TEST'
+set -euo pipefail
+mount --make-rprivate /
+fixture="$1/root"
+mkdir -p "$fixture"/{etc,var,run,tmp}
+mount --bind "$fixture" "$fixture"
+for path in etc var run tmp; do
+    mount --bind "$fixture/$path" "$fixture/$path"
+done
+mount -o remount,bind,ro "$fixture"
+cat > "$1/tmpfiles.conf" <<'RULES'
+z / 0700 root root -
+d /etc/astral-group-check 0750 root root -
+d /var/lib/astral-group-check 0750 root root -
+d /run/astral-group-check 0750 root root -
+d /tmp/astral-group-check 0750 root root -
+RULES
+if systemd-tmpfiles --create --root="$fixture" "$1/tmpfiles.conf" > "$1/unscoped.log" 2>&1; then
+    echo 'The read-only root fixture did not reproduce the original failure.' >&2
+    exit 1
+fi
+grep -Fq 'Read-only file system' "$1/unscoped.log"
+for path in etc var/lib run tmp; do
+    rm -rf "$fixture/$path/astral-group-check"
+done
+python3 - "$fixture" "$1/tmpfiles.conf" <<'PY'
+from pathlib import Path
+import shlex
+import subprocess
+import sys
+
+unit = Path('/usr/lib/systemd/system/rechunker-group-fix.service').read_text().splitlines()
+commands = [shlex.split(line.removeprefix('ExecStart=')) for line in unit if line.startswith('ExecStart=systemd-tmpfiles ')]
+assert len(commands) == 1
+subprocess.run([*commands[0], f'--root={sys.argv[1]}', sys.argv[2]], check=True)
+PY
+for path in etc var/lib run tmp; do
+    test "$(stat -c %a "$fixture/$path/astral-group-check")" = 750
+done
+test "$(stat -c %a "$fixture")" = 755
+umount -R "$fixture"
+MOUNT_TEST
+
 export XDG_CONFIG_HOME="$work/config" XDG_DATA_HOME="$work/data"
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
 
@@ -75,4 +141,4 @@ if ajust verify-image; then
     exit 1
 fi
 
-printf '%s\n' 'Fedora 45 greeter configuration and fresh/legacy/overridden container policies passed.'
+printf '%s\n' 'Fedora 45 greeter, TuneD migration, read-only group repair and container policy checks passed.'

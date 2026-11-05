@@ -25,7 +25,9 @@ ExecStart=bash -c 'touch /etc/gshadow && chmod 600 /etc/gshadow'
 ExecStart=bash -c 'rm /etc/gshadow'
 ExecStart=systemd-sysusers
 ExecStart=rechunker-group-fix
-ExecStart=systemd-tmpfiles --create --remove --boot --exclude-prefix=/dev
+# Repair ownership only on mutable paths. Fedora 45's tmpfiles rules also
+# adjust / itself, which fails on the read-only deployment root.
+ExecStart=systemd-tmpfiles --create --remove --boot --prefix=/etc --prefix=/var --prefix=/run --prefix=/tmp
 
 [Install]
 WantedBy=default.target multi-user.target
