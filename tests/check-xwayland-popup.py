@@ -45,12 +45,12 @@ def check_popup():
         "XMapRaised": ([display_type, window_type], C.c_int),
         "XSync": ([display_type, C.c_int], C.c_int),
         "XGetInputFocus": ([display_type, C.POINTER(window_type), C.POINTER(C.c_int)], C.c_int),
-        "XSetInputFocus": ([display_type, window_type, C.c_int, C.c_ulong], C.c_int),
         "XDestroyWindow": ([display_type, window_type], C.c_int),
         "XChangeWindowAttributes": ([display_type, window_type, C.c_ulong,
                                      C.POINTER(WindowAttributes)], C.c_int),
         "XSetTransientForHint": ([display_type, window_type, window_type], C.c_int),
         "XInternAtom": ([display_type, C.c_char_p, C.c_int], C.c_ulong),
+        "XGetSelectionOwner": ([display_type, C.c_ulong], window_type),
         "XSetWMProtocols": ([display_type, window_type, C.POINTER(C.c_ulong), C.c_int], C.c_int),
         "XChangeProperty": ([display_type, window_type, C.c_ulong, C.c_ulong,
                              C.c_int, C.c_int, C.POINTER(C.c_ubyte), C.c_int], C.c_int),
@@ -66,6 +66,14 @@ def check_popup():
         raise RuntimeError("Cannot open the isolated Xwayland display")
     windows = []
     try:
+        # XOpenDisplay can return before the on-demand Satellite has selected
+        # root-window events. Wait for its WM ownership before creating clients.
+        wm_selection = x.XInternAtom(display, b"WM_S0", 0)
+        end = time.monotonic() + 10
+        while not x.XGetSelectionOwner(display, wm_selection):
+            if time.monotonic() >= end:
+                raise RuntimeError("Satellite did not acquire the window-manager selection")
+            time.sleep(0.02)
         root = x.XDefaultRootWindow(display)
 
         def create(name):
@@ -81,27 +89,31 @@ def check_popup():
             x.XGetInputFocus(display, C.byref(window), C.byref(revert))
             return window.value
 
-        def wait_focus(expected):
+        def wait_focus(expected, stage, map_window=False):
             end = time.monotonic() + 10
             while time.monotonic() < end:
+                if map_window:
+                    # Keep the initial MapRequest live while Satellite finishes
+                    # startup; its event loop can otherwise sleep with it queued.
+                    x.XMapRaised(display, expected)
                 x.XSync(display, 0)
                 if focus() == expected:
                     return
                 time.sleep(0.02)
-            raise RuntimeError(f"Managed window never received focus: expected {expected:#x}, got {focus():#x}")
+            raise RuntimeError(f"Managed window never received focus ({stage}): expected {expected:#x}, got {focus():#x}")
 
         parent = create("Astral popup test parent")
-        x.XMapRaised(display, parent)
-        wait_focus(parent)
+        wait_focus(parent, "initial parent", map_window=True)
         normal = create("Astral managed-focus control")
         x.XMapRaised(display, normal)
-        wait_focus(normal)
+        wait_focus(normal, "managed control")
         x.XDestroyWindow(display, normal)
         windows.remove(normal)
         x.XSync(display, 0)
-        time.sleep(0.25)
-        x.XSetInputFocus(display, parent, 2, 0)
-        wait_focus(parent)
+        # Let Niri/Satellite restore focus after the control window closes.
+        # Forcing X11 focus here can pass wait_focus() before Satellite has a
+        # focused toplevel again, so it maps the popup as a new toplevel.
+        wait_focus(parent, "restored parent")
 
         popup = create("Astral Steam/Wine popup regression")
         attrs = WindowAttributes(override_redirect=1)
