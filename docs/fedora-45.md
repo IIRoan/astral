@@ -62,6 +62,9 @@ It also creates and labels the log directory before the power-profile service
 starts, preventing a fresh-boot race with TuneD's own directory creation.
 Administrator configuration files are preserved. SELinux remains enforcing.
 
+Firewalld starts after PolicyKit is ready. Slow authorization startup can
+otherwise cause firewall D-Bus requests to fail during boot.
+
 The legacy rechunker group repair remains enabled. Its final ownership repair
 only processes writable `/etc`, `/var`, `/run` and `/tmp` paths, avoiding a
 Fedora 45 tmpfiles rule that attempts to change the immutable root directory.
