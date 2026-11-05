@@ -1,0 +1,19 @@
+version: 45.0.0
+name: astral
+displayName: Astral OS
+createdAt: 2026-11-04T22:21:18Z
+description: Opinionated Fedora bootc desktop built around Niri and Noctalia.
+logoPath: assets/logos/logo-astral-badge.svg
+license: AGPL-3.0-or-later
+homeURL: https://github.com/IIRoan/astral
+keywords:
+  - bootc
+  - niri
+  - noctalia
+  - fedora
+containersImages:
+  - name: bootc
+    image: ghcr.io/iiroan/astral:latest
+    platforms:
+      - linux/amd64
+      - linux/arm64

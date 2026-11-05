@@ -3,5 +3,5 @@
 if [ "$(( RANDOM % 67 ))" -eq 0 ]; then
   exec hyfetch --ascii-file=/usr/share/astral/legally-distinct.txt "${@}"
 else
-  exec hyfetch --ascii-file=/usr/share/astral/astral.txt "${@}"
+  exec fastfetch "${@}"
 fi

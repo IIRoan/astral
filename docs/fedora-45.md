@@ -103,7 +103,7 @@ and upstream main at `9412ad63c44b60132fab1d0c270fc6bdea64a8c1`.
 | Jackrabbit bootstrap `--noverify` workaround | Astral retains signature verification; the gaming profile is outside the standard image. |
 
 Astral also adopts upstream's ten parallel package downloads and Fastfetch's
-EROFS filtering. Fedora 45 uses upstream's `Cute Chinese Frog` release codename.
+EROFS filtering. Astral names releases after the moon's phases; Fedora 45 is `Waxing Crescent`.
 The optional Jackrabbit profile selects the OGC kernel from mkosi's target
 release, with Rawhide resolved through the image's Fedora RPM macro. Kernel
 verification and extraction continue to use the same immutable digest.
