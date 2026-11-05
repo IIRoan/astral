@@ -213,10 +213,15 @@ jobs:
 
       - name: Check Xwayland popup focus in the built image
         run: |
-          podman run --rm --privileged \
+          podman run --rm --init --privileged \
             --volume "$GITHUB_WORKSPACE/tests:/usr/share/astral-tests:ro" \
             --entrypoint=/usr/bin/bash "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" -c \
-            'dnf5 install -y --setopt=install_weak_deps=False weston dbus-daemon mesa-dri-drivers </dev/null && exec bash /usr/share/astral-tests/check-xwayland-popup'
+            'set -euo pipefail
+             dnf5 install -y --setopt=install_weak_deps=False weston dbus-daemon mesa-dri-drivers </dev/null
+             for attempt in {1..10}; do
+               echo "Xwayland popup focus check ${attempt}/10"
+               bash /usr/share/astral-tests/check-xwayland-popup
+             done'
 
       - name: Check TPM recovery with the built Fedora encryption tools
         run: |
