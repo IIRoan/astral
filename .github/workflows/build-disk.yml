@@ -102,7 +102,7 @@ jobs:
           sudo mv "${SOURCE_DIR}"/astral.iso "${SOURCE_DIR}/astral-amd64.iso"
           (cd "${SOURCE_DIR}" && sha256sum astral-amd64.iso | sudo tee astral-amd64.iso-CHECKSUM)
           sudo rm -f "${SOURCE_DIR}/astral-unbranded.iso"
-          cp "$RUNNER_TEMP/astral-iso-source.json" "${SOURCE_DIR}/astral-amd64-source.json"
+          sudo install -m 0644 "$RUNNER_TEMP/astral-iso-source.json" "${SOURCE_DIR}/astral-amd64-source.json"
 
       - name: Upload ISO
         uses: chainguard-actions/actions-upload-artifact@c91615377dcc230c6b156542d25044f9b8d80dd8 # v7.0.2
