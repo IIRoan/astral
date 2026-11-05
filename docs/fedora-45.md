@@ -112,6 +112,10 @@ test. The artifact contains the ISO, its checksum, and source metadata recording
 the source and tool digests. Building this artifact does not promote the image
 or install it on the build machine.
 
+Fedora 45's RPM keys live in `/usr/share/pki/rpm-gpg`. The ISO workflow extracts
+them from the verified source image and makes them available at both the vendor
+path and the older `/etc/pki/rpm-gpg` path used by builder components.
+
 ## Validation and rollback
 
 PR runs build and test both images without publishing. `Verify published image`
