@@ -82,6 +82,7 @@ and upstream main at `9412ad63c44b60132fab1d0c270fc6bdea64a8c1`.
 | Obsolete chunkah creation label | Removed; mkosi supplies matching version and creation labels on the native images. |
 | Official Cisco OpenH264 repository | Included; image tests encode and decode an actual test video. |
 | Gutenprint CUPS drivers, PRs [443](https://github.com/zirconium-dev/zirconium/pull/443) and [445](https://github.com/zirconium-dev/zirconium/pull/445) | `gutenprint-cups` is included. |
+| Official Tailscale stable repository | Included with package and repository metadata GPG checks and upstream's repository priority. |
 | Terra repository cleanup and metadata signatures | Obsolete multimedia repository removed; Terra metadata and packages require GPG verification. |
 | DMS package and repository changes | Astral keeps its Noctalia desktop. |
 | Newly listed packages previously removed from Astral | Deliberate Astral removals, including Valent, Orca, IBus and mobile broadband services, stay removed. |

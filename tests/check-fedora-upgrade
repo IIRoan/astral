@@ -13,7 +13,8 @@ fi
 source /usr/lib/os-release
 test "$VERSION_ID" = 45
 test -n "${IMAGE_VERSION:-}"
-rpm -q kmscon-gl kmscon-freetype kmscon-pango gnome-keyring-pam podman netavark openh264 gutenprint-cups
+rpm -q kmscon-gl kmscon-freetype kmscon-pango gnome-keyring-pam podman netavark openh264 gutenprint-cups tailscale
+tailscale version
 gst-inspect-1.0 openh264dec > /dev/null
 gst-launch-1.0 -q videotestsrc num-buffers=4 \
     ! video/x-raw,format=I420,width=320,height=240,framerate=15/1 \
