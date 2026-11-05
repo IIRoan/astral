@@ -26,7 +26,7 @@ class IsoSourceTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         (self.root / "build-scripts").mkdir()
-        for name in ("iso.toml", "build-scripts/iso-tools.json"):
+        for name in ("iso.toml", "build-scripts/iso-tools.json", "build-scripts/Containerfile.iso-build"):
             (self.root / name).write_text((ROOT / name).read_text())
         self.config = self.root / "rendered.toml"
         self.metadata = self.root / "source.json"
@@ -84,6 +84,7 @@ class IsoSourceTests(unittest.TestCase):
         source = ISO.REPOSITORY + "@" + AMD64
         self.assertEqual(metadata["source_image"], source)
         self.assertEqual(metadata["install_reference"], source)
+        self.assertEqual(metadata["build_container_source"], source)
         self.assertTrue(metadata["pinned_source"])
         self.assertTrue(metadata["signatures_verified"])
         self.assertEqual(json.loads(self.metadata.read_text()), metadata)

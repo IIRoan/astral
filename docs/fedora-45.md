@@ -116,6 +116,13 @@ Fedora 45's RPM keys live in `/usr/share/pki/rpm-gpg`. The ISO workflow extracts
 them from the verified source image and makes them available at both the vendor
 path and the older `/etc/pki/rpm-gpg` path used by builder components.
 
+The legacy ISO builder also uses DNF 4, which cannot discover Fedora 45's
+`/usr/share/dnf5/repos.d` directory. A separate build container exposes copies
+of those signed repository definitions at the older path. It is derived
+offline from the verified source. The installer payload remains the original
+digest. Artifact metadata records the build recipe hash and local build image
+ID, and the artifact also includes the build manifest.
+
 ## Validation and rollback
 
 PR runs build and test both images without publishing. `Verify published image`

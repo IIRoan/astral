@@ -52,6 +52,15 @@ jobs:
             keydir=/usr/share/pki/rpm-gpg
             if [[ ! -d "$keydir" ]]; then keydir=/etc/pki/rpm-gpg; fi
             cp -L "$keydir"/* /out'
+          mkdir -p "$RUNNER_TEMP/iso-build-context"
+          sudo podman build --network=none --pull=never \
+            --build-arg "SOURCE_IMAGE=${TARGET_IMAGE}" \
+            --file "$PWD/build-scripts/Containerfile.iso-build" \
+            --tag localhost/astral-iso-build-context "$RUNNER_TEMP/iso-build-context"
+          build_container_id="$(sudo podman image inspect --format '{{.Id}}' localhost/astral-iso-build-context)"
+          jq --arg id "$build_container_id" '. + {build_container_id: $id}' \
+            "$RUNNER_TEMP/astral-iso-source.json" > "$RUNNER_TEMP/astral-iso-source.updated.json"
+          mv "$RUNNER_TEMP/astral-iso-source.updated.json" "$RUNNER_TEMP/astral-iso-source.json"
           sudo podman run \
             --rm \
             --privileged \
@@ -62,7 +71,8 @@ jobs:
             -v ./rpm-gpg/:/etc/pki/rpm-gpg/:ro \
             -v ./rpm-gpg/:/usr/share/pki/rpm-gpg/:ro \
             "$BUILDER_IMAGE" \
-            build --type iso --rootfs btrfs --output /output "${TARGET_IMAGE}"
+            build --type iso --rootfs btrfs --output /output \
+            --build-container localhost/astral-iso-build-context "${TARGET_IMAGE}"
           echo "output-directory=$(realpath ./output)" >> "$GITHUB_OUTPUT"
 
       - name: Brand ISOs
@@ -102,6 +112,7 @@ jobs:
             ${{ steps.build-iso.outputs.output-directory }}/astral-amd64.iso
             ${{ steps.build-iso.outputs.output-directory }}/astral-amd64.iso-CHECKSUM
             ${{ steps.build-iso.outputs.output-directory }}/astral-amd64-source.json
+            ${{ steps.build-iso.outputs.output-directory }}/manifest-iso.json
           if-no-files-found: error
           retention-days: 7
           compression-level: 0

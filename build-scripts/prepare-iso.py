@@ -2,6 +2,7 @@
 """Verify an immutable Astral source before preparing an ISO build."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -89,6 +90,8 @@ def prepare(root, digest, config_path, metadata_path, crane, cosign):
         "install_reference": install_reference, "pinned_source": pinned,
         "version": version, "signatures_verified": True,
         "builder_image": tools["builder"], "branding_image": tools["branding"],
+        "build_container_source": source,
+        "build_container_recipe_sha256": hashlib.sha256((root / "build-scripts/Containerfile.iso-build").read_bytes()).hexdigest(),
     }
     # All verification succeeds before either reviewable output is replaced.
     for path, data in ((config_path, rendered), (metadata_path, json.dumps(metadata, indent=2) + "\n")):
