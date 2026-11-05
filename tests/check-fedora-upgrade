@@ -44,6 +44,39 @@ noctalia-greeter sessions | grep -Fqx Niri
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+# Reproduce Anaconda's exact initialization on a fresh /var. The packaged CUPS
+# rule assumes its RPM-owned parent exists, but bootc removes packaged /var.
+spool_root="$work/spool-root"
+mkdir -p "$spool_root/etc" "$spool_root/usr/lib" "$spool_root/var/spool"
+cp /etc/passwd /etc/group "$spool_root/etc/"
+for database in passwd group; do
+    if [[ -f /usr/lib/$database ]]; then
+        cp "/usr/lib/$database" "$spool_root/usr/lib/"
+    fi
+done
+cp -a /usr/lib/tmpfiles.d "$spool_root/usr/lib/"
+mv "$spool_root/usr/lib/tmpfiles.d/astral-cups.conf" "$work/astral-cups.conf"
+cups_group="$(getent group lp | cut -d: -f3)"
+spool_permissions_match() {
+    test "$(stat -c '%a %u %g' "$spool_root/var/spool/cups" 2>/dev/null)" = "710 0 $cups_group" &&
+        test "$(stat -c '%a %u %g' "$spool_root/var/spool/cups/tmp" 2>/dev/null)" = "1770 0 $cups_group"
+}
+# Some tmpfiles versions create implicit parents with generic permissions;
+# the installer version can fail outright. Neither provides CUPS's state.
+if systemd-tmpfiles --create --boot --root="$spool_root" --prefix=/var/spool > "$work/cups-before.log" 2>&1 && spool_permissions_match; then
+    echo 'CUPS already initializes its package-owned spool state without the compatibility rule.' >&2
+    exit 1
+fi
+mv "$work/astral-cups.conf" "$spool_root/usr/lib/tmpfiles.d/astral-cups.conf"
+rm -rf "$spool_root/var/spool/cups"
+systemd-tmpfiles --create --boot --root="$spool_root" --prefix=/var/spool
+spool_permissions_match
+printf 'existing-print-job' > "$spool_root/var/spool/cups/tmp/astral-check"
+systemd-tmpfiles --create --boot --root="$spool_root" --prefix=/var/spool
+spool_permissions_match
+test "$(cat "$spool_root/var/spool/cups/tmp/astral-check")" = existing-print-job
+printf 'PASS: fresh Anaconda spool initialization and CUPS directory permissions.\n'
+
 # Exercise the real migration helper, including a previous factory link and
 # an administrator's regular configuration. A fresh image must ship Astral's
 # mapping rather than the package's stock mapping.

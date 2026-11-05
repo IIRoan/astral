@@ -65,7 +65,9 @@ only processes writable `/etc`, `/var`, `/run` and `/tmp` paths, avoiding a
 Fedora 45 tmpfiles rule that attempts to change the immutable root directory.
 
 Fresh installations also create and label GSSproxy's private state directories
-before its service starts. Each architecture image carries the same nonempty
+before its service starts. CUPS spool directories are initialized with Fedora's
+package-defined ownership and permissions, including when Anaconda runs tmpfiles
+only for `/var/spool`. Each architecture image carries the same nonempty
 OCI version and creation time as the published index. This gives bootc and
 bootupd a usable installation version, including on a fresh installation.
 
