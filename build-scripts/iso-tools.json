@@ -1,0 +1,4 @@
+{
+  "builder": "quay.io/centos-bootc/bootc-image-builder@sha256:4d8a0d9d173a9f450ff42d70777e1e0a6681a68f5c0f5084b65222eceb1f4d05",
+  "branding": "registry.fedoraproject.org/fedora@sha256:f5afe36c8ddb2aa5333597e900f53c5ed0267d9ebb27be765dc8ec2633aa1648"
+}

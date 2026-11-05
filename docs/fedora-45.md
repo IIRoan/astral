@@ -64,6 +64,53 @@ The legacy rechunker group repair remains enabled. Its final ownership repair
 only processes writable `/etc`, `/var`, `/run` and `/tmp` paths, avoiding a
 Fedora 45 tmpfiles rule that attempts to change the immutable root directory.
 
+Fresh installations also create and label GSSproxy's private state directories
+before its service starts. Each architecture image carries the same nonempty
+OCI version and creation time as the published index. This gives bootc and
+bootupd a usable installation version, including on a fresh installation.
+
+## Upstream comparison
+
+The implementation was compared with Zirconium's
+[Fedora 45 upgrade](https://github.com/zirconium-dev/zirconium/pull/408)
+and upstream main at `9412ad63c44b60132fab1d0c270fc6bdea64a8c1`.
+
+| Upstream change | Astral behavior |
+| --- | --- |
+| Fedora 45 image and explicit Fedora 45 tools tree | Both architectures use these releases. |
+| KMSCON packages, vendor greetd PAM, vendor container policy | Included, with Astral's login wrapper, keyring hooks and Fedora 44 policy compatibility. |
+| Obsolete chunkah creation label | Removed; mkosi supplies matching version and creation labels on the native images. |
+| Official Cisco OpenH264 repository | Included; image tests encode and decode an actual test video. |
+| Gutenprint CUPS drivers, PRs [443](https://github.com/zirconium-dev/zirconium/pull/443) and [445](https://github.com/zirconium-dev/zirconium/pull/445) | `gutenprint-cups` is included. |
+| Terra repository cleanup and metadata signatures | Obsolete multimedia repository removed; Terra metadata and packages require GPG verification. |
+| DMS package and repository changes | Astral keeps its Noctalia desktop. |
+| Newly listed packages previously removed from Astral | Deliberate Astral removals, including Valent, Orca, IBus and mobile broadband services, stay removed. |
+| Development mkosi revision | Astral retains pinned stable mkosi 27.1, tested against both Fedora 45 architectures. |
+| Jackrabbit bootstrap `--noverify` workaround | Astral retains signature verification; the gaming profile is outside the standard image. |
+
+## Candidate installer
+
+Build the ISO from an explicitly selected signed candidate digest:
+
+```bash
+gh workflow run build-disk.yml --ref feat/fedora-45 \
+    -f source-digest=sha256:REVIEWED_CANDIDATE_INDEX_OR_AMD64_DIGEST
+```
+
+The workflow verifies Astral's signatures on the requested index and its AMD64
+image before extracting keys or building the ISO. All those operations use the
+same immutable AMD64 digest. The candidate installer retains that digest as its
+signed update reference, so it cannot silently switch back to Fedora 44's
+`latest` channel. Without `source-digest`, the production channel is resolved
+once for building and the installed system follows `latest` as usual.
+
+The builder and Fedora branding images are pinned in
+[`build-scripts/iso-tools.json`](../build-scripts/iso-tools.json). Updating them
+requires reviewing new official image digests and repeating an installer boot
+test. The artifact contains the ISO, its checksum, and source metadata recording
+the source and tool digests. Building this artifact does not promote the image
+or install it on the build machine.
+
 ## Validation and rollback
 
 PR runs build and test both images without publishing. `Verify published image`

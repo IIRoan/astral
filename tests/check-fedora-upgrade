@@ -12,7 +12,19 @@ fi
 # shellcheck disable=SC1091
 source /usr/lib/os-release
 test "$VERSION_ID" = 45
-rpm -q kmscon-gl kmscon-freetype kmscon-pango gnome-keyring-pam podman netavark
+test -n "${IMAGE_VERSION:-}"
+rpm -q kmscon-gl kmscon-freetype kmscon-pango gnome-keyring-pam podman netavark openh264 gutenprint-cups
+gst-inspect-1.0 openh264dec > /dev/null
+gst-launch-1.0 -q videotestsrc num-buffers=4 \
+    ! video/x-raw,format=I420,width=320,height=240,framerate=15/1 \
+    ! openh264enc ! openh264dec ! fakesink
+
+# Exercise first-boot state creation rather than relying on state inherited
+# from an older installation. The VM boot test checks enforcing SELinux too.
+systemd-tmpfiles --create astral-gssproxy.conf
+for path in clients rcache; do
+    test "$(stat -c %a /var/lib/gssproxy/"$path")" = 700
+done
 if rpm -q NetworkManager-vpnc; then
     echo 'The retired NetworkManager-vpnc plugin is still installed.' >&2
     exit 1
