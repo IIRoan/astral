@@ -60,8 +60,6 @@ just --completions zsh | sed -E 's/([\(_" ])just/\1ajust/g' > /usr/share/zsh/sit
 just --completions fish | sed -E 's/([\(_" ])just/\1ajust/g' > /usr/share/fish/vendor_completions.d/ajust.fish
 
 fc-cache --force --really-force --system-only --verbose # recreate font-cache to pick up the added fonts
-# OSTree zeroes mtimes, so GTK and Qt would keep trusting a cache without the added astral icon.
-gtk-update-icon-cache --force /usr/share/icons/hicolor
 
 # These files NEED to be on the image.
 grep -F -e "Comment=Central repository of Flatpak applications" /usr/share/flatpak/remotes.d/flathub.flatpakrepo
@@ -80,11 +78,7 @@ ln -s fedora-release /usr/lib/system-release
     . /usr/lib/os-release
     IMAGE_NAME="astral"
     HOME_URL="https://github.com/iiroan/astral"
-    # Gold from assets/logos/logo-astral.svg (#e2b56a).
     GOLD="226:181:106"
-    # Codenames follow the moon's phases, one per Fedora release:
-    # 45 Waxing Crescent, then First Quarter, Waxing Gibbous, Full Moon, ...
-    CODENAME="Waxing Crescent"
 
     tee /usr/lib/os-release <<EOF
 NAME="${IMAGE_NAME^}"
@@ -96,7 +90,7 @@ PRETTY_NAME="${IMAGE_NAME^}"
 FANCY_NAME="\033[0;38:2:${GOLD};1;49m✦\033[0;38:2:${GOLD};49m ${IMAGE_NAME^} \033[0m"
 VERSION="$VERSION"
 VERSION_ID="$VERSION_ID"
-VERSION_CODENAME="${CODENAME}"
+VERSION_CODENAME="Waxing Crescent"
 ANSI_COLOR="38:2:${GOLD};1;49"
 ANSI_COLOR_REVERSE="48;2;${GOLD//:/;};1;30"
 LOGO="${IMAGE_NAME}"

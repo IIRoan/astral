@@ -1,9 +1,6 @@
 # Astral
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/logos/logo-astral.svg" />
-  <img src="assets/logos/logo-astral-light.svg" width="180" alt="Astral logo" />
-</picture>
+<img src="assets/logos/logo-astral-badge.svg" width="180" alt="Astral logo" />
 
 Astral is an opinionated Fedora bootc desktop built around Niri and Noctalia. It
 keeps Zirconium's container-focused image foundation while giving the desktop,

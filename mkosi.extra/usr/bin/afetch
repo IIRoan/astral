@@ -3,7 +3,5 @@
 if [ "$(( RANDOM % 67 ))" -eq 0 ]; then
   exec hyfetch --ascii-file=/usr/share/astral/legally-distinct.txt "${@}"
 else
-  # Plain fastfetch so the logo keeps the colors from /usr/share/astral/fastfetch.jsonc
-  # (hyfetch would repaint it with flag colors).
   exec fastfetch "${@}"
 fi
