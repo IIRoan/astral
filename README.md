@@ -4,10 +4,8 @@
 
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/astral)](https://artifacthub.io/packages/search?repo=astral)
 
-Astral is an opinionated Fedora bootc desktop built around Niri and Noctalia. It
-keeps Zirconium's container-focused image foundation while giving the desktop,
-developer tooling, image names, defaults, and release pipeline an independent
-Astral identity.
+Astral is an opinionated Fedora bootc desktop built around Niri and Noctalia, on
+top of Zirconium's container-focused image foundation.
 
 ## Included
 
@@ -17,20 +15,16 @@ Astral identity.
   enabled for Docker API-compatible tools.
 - Virtual Machine Manager with a system QEMU/KVM backend and default NAT
   networking.
-- Integrated wallpapers, logos, and default dotfiles. This repository has no
-  asset or dotfile submodules.
+- Integrated wallpapers, logos, and default dotfiles.
 - A stable Fedora 45 bootc image for AMD64 and ARM64.
 
 ## Install
 
-Rebase an existing Fedora Atomic installation to the standard image:
+Switch an existing Fedora Atomic installation to Astral:
 
 ```bash
 sudo bootc switch ghcr.io/iiroan/astral:latest
 ```
-
-The image must be published and signed by the repository workflow before this
-command can be used.
 
 For existing Fedora 44 installations, follow the [Fedora 45 upgrade guide](docs/fedora-45.md)
 to check container networking and local login overrides before updating.
@@ -53,10 +47,6 @@ Put personal Niri overrides in `~/.config/niri/local.kdl` or system-wide
 overrides in `/etc/niri/local.kdl`. Curated Noctalia defaults live in
 `~/.config/noctalia/config.toml`; GUI changes are stored separately by
 Noctalia under `~/.local/state/noctalia/`.
-
-The [display-color profile](docs/display-color.md) preserves near-white detail
-on the verified Predator XB253Q unit using an unprivileged, per-monitor SDR
-white-level adjustment. It includes override and disable instructions.
 
 ## Containers
 
@@ -84,72 +74,42 @@ ajust update
 ajust --help
 ```
 
+## Updates
+
+The system image and Flatpaks update daily. A new image is staged until your
+next normal reboot; automatic updates never restart your session. `ajust status`
+shows update health, and a desktop notification repeats daily while an update
+failure or pending reboot is unresolved. Firmware is checked daily and applied
+with `ajust update-firmware`.
+
+Homebrew's Brewfile dump and cleanup leave out Cargo, Flatpak, Go, Krew, npm,
+uv, and VS Code packages; see `/etc/homebrew/brew.env`.
+
 ## Build
 
-Install `mkosi`, `just`, and Podman, then build the standard bootc image:
+Install `mkosi`, `just`, and Podman, then build the image:
 
 ```bash
 just build
 ```
 
-The build tools run in an explicit Fedora 45 tools tree, independently of the
-host distribution and the image release. Update `ToolsTreeRelease` deliberately
-when changing the build environment.
+The build runs in a Fedora 45 tools tree, independent of the host distribution.
+Downloaded tools are checked against the SHA-256 hashes in
+`build-scripts/tools.lock`, and Homebrew's bootstrap image is verified with its
+[upstream signing key](https://github.com/ublue-os/brew/blob/main/cosign.pub).
 
-Build preparation checks downloaded tools against the versions and SHA-256 hashes
-in `build-scripts/tools.lock`, including cached downloads. Homebrew's bootstrap
-image is verified with the [upstream signing key](https://github.com/ublue-os/brew/blob/main/cosign.pub),
-vendored as `build-scripts/ublue-brew.pub`, before
-extracting the same immutable digest. The optional Jackrabbit profile also
-verifies its kernel image's signing workflow and its audio firmware checksum.
-Update tool versions and hashes together from the upstream release checksum
-manifests; signing-key changes require a reviewed update to the vendored key.
-
-GitHub Actions publishes the multi-architecture image to GHCR on pushes to the
-default branch and daily so Fedora security updates land without a manual commit.
-The scheduled job refreshes its workflow activity to prevent GitHub's inactivity
-timeout. Failed builds open an issue which closes when builds recover.
-The separate manual ISO workflow builds an AMD64 installer and
-stores it as a seven-day Actions artifact.
-
-System images and both system and user Flatpaks update daily, retrying failures
-every 15 minutes with a limit of four starts per two hours. Images are staged
-until your next normal reboot; automatic updates never restart your session.
-Homebrew maintenance runs through a shared lock, so manual and scheduled
-upgrades cannot overlap.
-The brew-proxy ownership repair service runs before Astral installs its lock
-wrapper or starts scheduled Homebrew updates. The factory
-`/etc/homebrew/brew.env` keeps Brewfile dump and cleanup from including Cargo,
-Flatpak, Go, Krew, npm, uv, and VS Code packages outside Homebrew.
-`ajust status` reports actual update health, and desktop notifications repeat
-daily while a failure or pending system reboot remains unresolved. Firmware is
-checked daily and requires `ajust update-firmware` to apply; unresolved firmware
-updates are also reminded daily.
-
-Dependabot checks Action versions daily and rebases update PRs automatically.
-Minor and patch updates can merge automatically after the required `Image checks`
-status passes; major upgrades require review. Configure the repository to allow
-auto-merge and protect `main` with `Image checks` required. The merge workflow
-reads verified bot metadata and never runs PR code with a write token.
+GitHub Actions publishes the image to GHCR on every push to `main` and daily, so
+Fedora security updates land without a manual commit. A manual workflow builds
+an AMD64 installer ISO.
 
 ## Update Security
 
-Published architecture images and the final multi-architecture manifest are
-signed with Astral's Sigstore private key. The installed containers policy
-requires signatures matching the vendored `astral.pub` key for images under
-`ghcr.io/iiroan`, so `bootc` updates reject images that are not signed by
-Astral. Each published manifest also receives GitHub-hosted SLSA build
-provenance tied to its immutable digest. After publish, CI verifies the
-Sigstore signature against `astral.pub` and the provenance attestation before
-the workflow succeeds. External workflow actions use Chainguard's hardened
-equivalents, pinned to full commit hashes and tracked by Dependabot. Mkosi has
-no hardened action in the catalog: a local setup action fetches its pinned
-v27.1 CLI through Chainguard checkout and installs the Ubuntu prerequisites.
-Review and update that source pin explicitly when upgrading mkosi.
-Guardener's [Hardened Actions review](https://www.chainguard.dev/docs/chainguard/guardener/github/actions-security)
-is enabled through `.chainguard/actions.yaml` to flag workflow references with
-Chainguard replacements in pull request recommendations.
-The signing secret is only exposed to publishing steps.
+Every published image is signed with Astral's Sigstore key. The installed
+container policy requires signatures matching `astral.pub` for images under
+`ghcr.io/iiroan`, so `bootc` refuses updates that Astral did not sign. Each
+image also carries GitHub SLSA build provenance, and CI verifies the signature
+and provenance before a release counts as published. `ajust verify-image`
+checks the local signature policy.
 
 TPM disk auto-unlock is configured explicitly with `ajust toggle-tpm2`.
 The setup helper requires Secure Boot/shim measurements and a verified recovery
