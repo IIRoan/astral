@@ -1,6 +1,6 @@
 [customizations.installer.kickstart]
 contents = """
-%post
+%post --erroronfail
 bootc switch --mutate-in-place --enforce-container-sigpolicy --transport registry ghcr.io/iiroan/astral:latest
 %end
 """

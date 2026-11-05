@@ -89,6 +89,7 @@ class IsoSourceTests(unittest.TestCase):
         self.assertTrue(metadata["signatures_verified"])
         self.assertEqual(json.loads(self.metadata.read_text()), metadata)
         kickstart = tomllib.loads(self.config.read_text())["customizations"]["installer"]["kickstart"]["contents"]
+        self.assertIn("%post --erroronfail\nbootc switch", kickstart)
         self.assertIn("--enforce-container-sigpolicy --transport registry " + source, kickstart)
         self.assertNotIn(ISO.DEFAULT_REFERENCE, kickstart)
         self.assertEqual([call[-1] for call in self.calls if call[:2] == ["cosign", "verify"]],

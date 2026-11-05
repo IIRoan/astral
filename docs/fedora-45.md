@@ -102,7 +102,8 @@ The workflow verifies Astral's signatures on the requested index and its AMD64
 image before extracting keys or building the ISO. All those operations use the
 same immutable AMD64 digest. The candidate installer retains that digest as its
 signed update reference, so it cannot silently switch back to Fedora 44's
-`latest` channel. Without `source-digest`, the production channel is resolved
+`latest` channel. Failure to set the signed update reference aborts the installer.
+Without `source-digest`, the production channel is resolved
 once for building and the installed system follows `latest` as usual.
 
 The builder and Fedora branding images are pinned in
