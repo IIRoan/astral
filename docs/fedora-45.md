@@ -125,6 +125,18 @@ ID, and the artifact also includes the build manifest.
 
 ## Validation and rollback
 
+Check `df -h /boot` before staging and leave room for the new image's kernel
+and initramfs alongside the pinned Fedora 44 deployment. Small boot partitions,
+including bootc's generic 510 MiB TPM layout, can run out of space at shutdown
+even after staging succeeds. Provision at least a 1 GiB boot partition for a
+new installation and check available space on existing installations.
+
+After reboot, confirm the expected image is actually booted. If Fedora 44
+remains active, inspect `journalctl -b -1 -u ostree-finalize-staged.service`;
+a successful staging command does not prove boot finalization succeeded.
+Keep the working rollback deployment and repair capacity before retrying;
+do not delete kernel files by hand.
+
 PR runs build and test both images without publishing. `Verify published image`
 is therefore skipped there. The other skipped jobs are housekeeping:
 `keepalive` maintains scheduled workflows, `report` tracks production build
