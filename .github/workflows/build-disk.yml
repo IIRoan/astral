@@ -48,7 +48,10 @@ jobs:
           sudo podman pull "${TARGET_IMAGE}"
           echo "ISO source: ${TARGET_IMAGE}"
           sudo mkdir -p rpm-gpg output
-          sudo podman run --rm -v ./rpm-gpg:/out:Z "${TARGET_IMAGE}" bash -c 'cp /etc/pki/rpm-gpg/* /out'
+          sudo podman run --rm -v ./rpm-gpg:/out:Z "${TARGET_IMAGE}" bash -euc '
+            keydir=/usr/share/pki/rpm-gpg
+            if [[ ! -d "$keydir" ]]; then keydir=/etc/pki/rpm-gpg; fi
+            cp -L "$keydir"/* /out'
           sudo podman run \
             --rm \
             --privileged \
@@ -57,6 +60,7 @@ jobs:
             -v ./output/:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
             -v ./rpm-gpg/:/etc/pki/rpm-gpg/:ro \
+            -v ./rpm-gpg/:/usr/share/pki/rpm-gpg/:ro \
             "$BUILDER_IMAGE" \
             build --type iso --rootfs btrfs --output /output "${TARGET_IMAGE}"
           echo "output-directory=$(realpath ./output)" >> "$GITHUB_OUTPUT"

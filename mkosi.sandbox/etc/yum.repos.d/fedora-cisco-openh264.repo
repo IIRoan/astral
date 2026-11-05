@@ -6,7 +6,7 @@ enabled=1
 metadata_expire=14d
 repo_gpgcheck=0
 gpgcheck=1
-gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-$releasever-$basearch
+gpgkey=file:///usr/share/pki/rpm-gpg/RPM-GPG-KEY-fedora-$releasever-$basearch
 
 [fedora-cisco-openh264-debuginfo]
 name=Fedora $releasever openh264 (From Cisco) - $basearch - Debug
@@ -16,4 +16,4 @@ enabled=0
 metadata_expire=14d
 repo_gpgcheck=0
 gpgcheck=1
-gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-$releasever-$basearch
+gpgkey=file:///usr/share/pki/rpm-gpg/RPM-GPG-KEY-fedora-$releasever-$basearch
