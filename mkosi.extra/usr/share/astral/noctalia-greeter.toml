@@ -7,7 +7,7 @@ default = "niri"
 [appearance]
 scheme = "Synced"
 password_style = "default"
-hide_logo = true
+hide_logo = false
 scheme_selector_position = "hidden"
 
 [idle]

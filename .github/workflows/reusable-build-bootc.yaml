@@ -54,7 +54,7 @@ env:
   IMAGE_DESC: "Opinionated niri + bootc image"
   IMAGE_KEYWORDS: "bootc,niri"
   IMAGE_LICENSE: AGPL-3.0-or-later
-  IMAGE_LOGO_URL: "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/assets/logos/logo-astral.svg"
+  IMAGE_LOGO_URL: "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/assets/logos/logo-astral-badge.svg"
   IMAGE_NAME: "${{ inputs.image-name }}"
   IMAGE_REGISTRY: "ghcr.io/iiroan"
 
