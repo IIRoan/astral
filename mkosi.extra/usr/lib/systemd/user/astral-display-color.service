@@ -1,0 +1,17 @@
+[Unit]
+Description=Apply the verified per-monitor SDR white level
+PartOf=graphical-session.target
+After=graphical-session.target
+ConditionEnvironment=WAYLAND_DISPLAY
+
+[Service]
+EnvironmentFile=/usr/share/astral/display-color/acer-xb253q.env
+EnvironmentFile=-/etc/astral/display-color.env
+EnvironmentFile=-%h/.config/astral/display-color.env
+ExecStart=/usr/libexec/astral/display-color --apply --vendor ${ASTRAL_DISPLAY_VENDOR} --model ${ASTRAL_DISPLAY_MODEL} --serial ${ASTRAL_DISPLAY_SERIAL} --gain ${ASTRAL_DISPLAY_GAIN}
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=graphical-session.target

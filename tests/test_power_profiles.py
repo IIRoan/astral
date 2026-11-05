@@ -33,8 +33,8 @@ class PowerProfileTests(unittest.TestCase):
             names += [n.strip() for n in read(conf)["main"].get("include", "").split(",") if n.strip()]
 
     def test_ppd_mapping_is_installed_into_etc(self):
-        tmpfiles = (EXTRA / "usr/lib/tmpfiles.d/99-astral-factory.conf").read_text().splitlines()
-        self.assertIn("L+ /etc/tuned/ppd.conf - - - - /usr/share/astral/tuned/ppd.conf", tmpfiles)
+        tmpfiles = (EXTRA / "usr/lib/tmpfiles.d/astral-tuned.conf").read_text().splitlines()
+        self.assertIn("C /etc/tuned/ppd.conf 0644 root root - /usr/share/astral/tuned/ppd.conf", tmpfiles)
 
 
 if __name__ == "__main__":

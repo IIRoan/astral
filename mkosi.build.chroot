@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+bash "$SRCDIR/build-scripts/build-display-color"

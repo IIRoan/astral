@@ -23,7 +23,13 @@ iterate-bootc:
 build: build-ostree
 
 build-ostree:
-    mkosi -B --debug-shell --profile=base,base-desktop,bootc-ostree,brew,astral-bootc-ostree
+    #!/usr/bin/env bash
+    set -euo pipefail
+    created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    version="devel.$(date -u +%Y%m%d).$(git rev-parse --short=12 HEAD)"
+    mkosi -B --debug-shell --profile=base,base-desktop,bootc-ostree,brew,astral-bootc-ostree \
+        --image-version="$version" \
+        --oci-labels="org.opencontainers.image.version=$version org.opencontainers.image.created=$created"
 
 build-sysupdate:
     mkosi -B --debug-shell --profile=base,base-desktop,sysupdate,brew,base
@@ -62,11 +68,6 @@ rechunk $image_name=image:
     #!/usr/bin/env bash
     set -xeuo pipefail
 
-    # FIXME: Bandaid fix for
-    # Upstream context: https://github.com/zirconium-dev/zirconium/issues/363
-    # Do this properly in mkosi at some point
-    DATE="$(date -u +%Y\-%m\-%d\T%H\:%M\:%S\Z)"
-
     CHUNKAH_OUTPUT_DIR="$(mktemp -d)"
     CHUNKAH_CONFIG_FILE="$(mktemp)"
 
@@ -79,7 +80,6 @@ rechunk $image_name=image:
         quay.io/coreos/chunkah:latest build \
         --verbose \
         --compressed \
-        --label org.opencontainers.image.created="${DATE}" \
         --max-layers 256 \
         --config /chunkah-config.json \
         --output oci:/run/out/chunked

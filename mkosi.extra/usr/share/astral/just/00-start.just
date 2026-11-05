@@ -23,8 +23,10 @@ status:
     else
         echo "Signing key: missing"
     fi
-    if grep -q 'ghcr.io/iiroan' /etc/containers/policy.json 2>/dev/null \
-        && grep -q 'sigstoreSigned' /etc/containers/policy.json 2>/dev/null; then
+    policy=/etc/containers/policy.json
+    [[ -e "$policy" ]] || policy=/usr/share/containers/policy.json
+    if grep -q 'ghcr.io/iiroan' "$policy" 2>/dev/null \
+        && grep -q 'sigstoreSigned' "$policy" 2>/dev/null; then
         echo "Signature policy: ghcr.io/iiroan requires astral.pub"
     else
         echo "Signature policy: not installed"
@@ -60,6 +62,8 @@ verify-image:
     KEY="/usr/share/pki/containers/astral.pub"
     POLICY="/etc/containers/policy.json"
     REGISTRY_D="/etc/containers/registries.d/iiroan.yaml"
+    [[ -e "${POLICY}" ]] || POLICY="/usr/share/containers/policy.json"
+    [[ -e "${REGISTRY_D}" ]] || REGISTRY_D="/usr/share/containers/registries.d/iiroan.yaml"
 
     fail() {
         echo "verify-image: $*" >&2

@@ -4,7 +4,18 @@ set -euo pipefail
 # Enable the new timers once for existing users after a rebase. Later choices
 # to disable them are respected on subsequent logins.
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/astral"
-[[ ! -e "$state_dir/update-timers-v1" ]] || exit 0
-systemctl --user enable --now astral-flatpak-update.timer astral-update-health.timer
 mkdir -p "$state_dir"
-touch "$state_dir/update-timers-v1"
+if [[ ! -e "$state_dir/update-timers-v1" ]]; then
+    systemctl --user enable --now astral-flatpak-update.timer astral-update-health.timer
+    touch "$state_dir/update-timers-v1"
+fi
+
+# Separate migration: existing users may already have the timer marker. Later
+# choices to disable or mask color correction are left alone.
+if [[ ! -e "$state_dir/display-color-v1" ]]; then
+    color_state="$(systemctl --user is-enabled astral-display-color.service || true)"
+    if [[ "$color_state" != masked && "$color_state" != masked-runtime ]]; then
+        systemctl --user enable --now astral-display-color.service
+    fi
+    touch "$state_dir/display-color-v1"
+fi

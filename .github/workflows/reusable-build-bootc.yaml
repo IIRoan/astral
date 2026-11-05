@@ -26,6 +26,11 @@ on:
         required: false
         type: boolean
         default: true
+      candidate:
+        description: Publish only isolated candidate tags during a manual run
+        required: false
+        type: boolean
+        default: false
       profiles:
         description: "Extra mkosi profiles to use"
         required: false
@@ -39,6 +44,10 @@ on:
       SIGNING_SECRET:
         description: "The private key used to sign the image"
         required: false
+    outputs:
+      digest:
+        description: Verified multi-architecture image digest
+        value: ${{ jobs.manifest.outputs.digest }}
 
 env:
   DEFAULT_TAG: "${{ inputs.default-tag }}"
@@ -56,7 +65,57 @@ jobs:
       contents: read
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      distribution_version: ${{ steps.imagemetadata.outputs.distributionversion }}
+      image_version: ${{ steps.imagemetadata.outputs.imageversion }}
+      image_created: ${{ steps.imagemetadata.outputs.imagecreated }}
     steps:
+      - name: Validate publishing context
+        env:
+          PUBLISH_IMAGE: ${{ inputs.publish }}
+          CANDIDATE_IMAGE: ${{ inputs.candidate }}
+          IMAGE_TAG: ${{ inputs.default-tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          if [[ "$PUBLISH_IMAGE" != true ]]; then
+            exit 0
+          fi
+          if [[ "$CANDIDATE_IMAGE" == true ]]; then
+            [[ "$EVENT_NAME" == workflow_dispatch ]]
+            [[ "$SOURCE_REF" == refs/heads/* ]]
+            [[ "$IMAGE_TAG" == "candidate-${RUN_ID}-${RUN_ATTEMPT}" ]]
+          else
+            [[ "$SOURCE_REF" == "refs/heads/${DEFAULT_BRANCH}" ]]
+            [[ "$EVENT_NAME" == push || "$EVENT_NAME" == schedule || "$EVENT_NAME" == workflow_dispatch ]]
+          fi
+
+      - name: Checkout
+        uses: chainguard-actions/actions-checkout@37298d8de412b35988dd165ffae45f45b329d365 # v7.0.1
+
+      - name: Get mkosi metadata
+        id: imagemetadata
+        env:
+          MANUAL_RELEASE: ${{ inputs.release }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          if [ "$MANUAL_RELEASE" != "" ] ; then
+            distribution_version="$MANUAL_RELEASE"
+          else
+            distribution_version="$(grep '^Release=' mkosi.conf | cut -d= -f2-)"
+          fi
+          [[ "$distribution_version" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]
+          [[ "$RUN_ID" =~ ^[1-9][0-9]*$ && "$RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          image_version="${distribution_version}.${RUN_ID}.${RUN_ATTEMPT}"
+          image_created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          printf 'distributionversion=%s\nimageversion=%s\nimagecreated=%s\n' \
+            "$distribution_version" "$image_version" "$image_created" >> "$GITHUB_OUTPUT"
+
       - name: Set matrix
         id: set-matrix
         env:
@@ -100,6 +159,8 @@ jobs:
         env:
           CI_MKOSI_PROFILES: ${{ inputs.profiles }}
           CI_MKOSI_RELEASE: ${{ inputs.release }}
+          CI_IMAGE_VERSION: ${{ needs.generate_matrix.outputs.image_version }}
+          CI_IMAGE_CREATED: ${{ needs.generate_matrix.outputs.image_created }}
           IMAGE_FULL: localhost/${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -108,7 +169,10 @@ jobs:
           if [ "$CI_MKOSI_RELEASE" != "" ] ; then
             RELEASE_ARGUMENTS+=("--release=$CI_MKOSI_RELEASE")
           fi
-          sudo mkosi -B -ff --debug "--profile=base,base-desktop,bootc-ostree,brew,astral-bootc-ostree${CI_MKOSI_PROFILES:+,${CI_MKOSI_PROFILES}}" "${RELEASE_ARGUMENTS[@]}" "--environment=GITHUB_TOKEN=${GITHUB_TOKEN}"
+          sudo mkosi -B -ff --debug "--profile=base,base-desktop,bootc-ostree,brew,astral-bootc-ostree${CI_MKOSI_PROFILES:+,${CI_MKOSI_PROFILES}}" \
+            "${RELEASE_ARGUMENTS[@]}" "--environment=GITHUB_TOKEN=${GITHUB_TOKEN}" \
+            "--image-version=${CI_IMAGE_VERSION}" \
+            "--oci-labels=org.opencontainers.image.version=${CI_IMAGE_VERSION} org.opencontainers.image.created=${CI_IMAGE_CREATED}"
 
       - name: Load image
         id: load
@@ -126,10 +190,40 @@ jobs:
           set -e
           env IMAGE_FULL="localhost/${IMAGE_NAME}:${DEFAULT_TAG}" just lint
 
+      - name: Check installation metadata on the native image
+        env:
+          EXPECTED_VERSION: ${{ needs.generate_matrix.outputs.image_version }}
+          EXPECTED_CREATED: ${{ needs.generate_matrix.outputs.image_created }}
+        run: |
+          set -euo pipefail
+          image="localhost/${IMAGE_NAME}:${DEFAULT_TAG}"
+          test "$(podman image inspect --format '{{ index .Labels "org.opencontainers.image.version" }}' "$image")" = "$EXPECTED_VERSION"
+          test "$(podman image inspect --format '{{ index .Labels "org.opencontainers.image.created" }}' "$image")" = "$EXPECTED_CREATED"
+          test "$(podman image inspect --format '{{ index .Labels "containers.bootc" }}' "$image")" = 1
+
       - name: Check Flatpak updates in the built image
         run: |
           podman run --rm -i --entrypoint=/usr/bin/bash \
             "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" < tests/check-flatpak-update
+
+      - name: Check Fedora upgrade compatibility in the built image
+        run: |
+          podman run --rm --privileged -i --entrypoint=/usr/bin/bash \
+            "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" < tests/check-fedora-upgrade
+
+      - name: Check Xwayland popup focus in the built image
+        run: |
+          podman run --rm --privileged \
+            --volume "$GITHUB_WORKSPACE/tests:/usr/share/astral-tests:ro" \
+            --entrypoint=/usr/bin/bash "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" -c \
+            'dnf5 install -y --setopt=install_weak_deps=False weston dbus-daemon mesa-dri-drivers </dev/null && exec bash /usr/share/astral-tests/check-xwayland-popup'
+
+      - name: Check TPM recovery with the built Fedora encryption tools
+        run: |
+          podman run --rm --privileged -i --entrypoint=/usr/bin/bash \
+            "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" -c \
+            'dnf5 install -y --setopt=install_weak_deps=False swtpm tpm2-tools </dev/null && exec python3 -' \
+            < tests/check-tpm-policy
 
       - name: Login to GitHub Container Registry
         if: inputs.publish
@@ -194,6 +288,7 @@ jobs:
     if: always()
     needs:
       - build_push
+      - generate_matrix
     outputs:
       digest: ${{ steps.publish.outputs.digest }}
     permissions:
@@ -217,56 +312,33 @@ jobs:
       - name: Checkout
         uses: chainguard-actions/actions-checkout@37298d8de412b35988dd165ffae45f45b329d365 # v7.0.1
 
-        # This generates a timestamp like what is defined on the ArtifactHub documentation
-        # E.G: 2022-02-08T15:38:15Z'
-        # https://artifacthub.io/docs/topics/repositories/container-images/
-        # https://linux.die.net/man/1/date
-      - name: Get current date
-        id: date
-        run: |
-          set -xeuo pipefail
-          echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "${GITHUB_OUTPUT}"
-
-      - name: Get mkosi metadata
-        id: imagemetadata
-        env:
-          MANUAL_RELEASE: ${{ inputs.release }}
-        run: |
-          set -xeuo pipefail
-          if [ "$MANUAL_RELEASE" != "" ] ; then
-            distribution_version="$MANUAL_RELEASE"
-          else
-            distribution_version="$(grep '^Release=' mkosi.conf | cut -d= -f2-)"
-          fi
-          [[ "$distribution_version" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]
-          printf 'distributionversion=%s\n' "$distribution_version" >> "${GITHUB_OUTPUT}"
-
       - name: Image Metadata
         uses: chainguard-actions/docker-metadata-action@f00cce7d85a292451bbab8346cddfdfb3a7b0ea4 # v6.2.0
         if: inputs.publish
         id: metadata
         with:
+          flavor: latest=false
           tags: |
             type=raw,value=${{ env.DEFAULT_TAG }}
-            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}
+            type=raw,value=${{ needs.generate_matrix.outputs.distribution_version }},enable=${{ ! inputs.candidate }}
             type=raw,value=${{ env.DEFAULT_TAG }}-${{ github.sha }}
-            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}-${{ github.sha }}
-            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}
-            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}.{{date 'YYYYMMDD'}}
-            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}-${{ github.sha }}
-            type=raw,value=${{ steps.imagemetadata.outputs.distributionversion }}.{{date 'YYYYMMDD'}}-${{ github.sha }}
-            type=raw,value={{ date 'YYYYMMDD'}},enable=${{ env.DEFAULT_TAG == 'latest' }}
-            type=ref,event=pr
-            type=sha,enable=${{ github.event_name == 'pull_request' }}
+            type=raw,value=${{ needs.generate_matrix.outputs.distribution_version }}-${{ github.sha }},enable=${{ ! inputs.candidate }}
+            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}},enable=${{ ! inputs.candidate }}
+            type=raw,value=${{ needs.generate_matrix.outputs.distribution_version }}.{{date 'YYYYMMDD'}},enable=${{ ! inputs.candidate }}
+            type=raw,value=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}-${{ github.sha }},enable=${{ ! inputs.candidate }}
+            type=raw,value=${{ needs.generate_matrix.outputs.distribution_version }}.{{date 'YYYYMMDD'}}-${{ github.sha }},enable=${{ ! inputs.candidate }}
+            type=raw,value={{ date 'YYYYMMDD'}},enable=${{ ! inputs.candidate && env.DEFAULT_TAG == 'latest' }}
+            type=ref,event=pr,enable=${{ ! inputs.candidate }}
+            type=sha,enable=${{ ! inputs.candidate && github.event_name == 'pull_request' }}
           labels: |
             containers.bootc=1
             io.artifacthub.package.deprecated=false
             io.artifacthub.package.keywords=${{ env.IMAGE_KEYWORDS }}
             io.artifacthub.package.license=${{ env.IMAGE_LICENSE }}
             io.artifacthub.package.logo-url=${{ env.IMAGE_LOGO_URL }}
-            io.artifacthub.package.prerelease=false
+            io.artifacthub.package.prerelease=${{ inputs.candidate }}
             io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/README.md
-            org.opencontainers.image.created=${{ steps.date.outputs.date }}
+            org.opencontainers.image.created=${{ needs.generate_matrix.outputs.image_created }}
             org.opencontainers.image.description=${{ env.IMAGE_DESC }}
             org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/README.md
             org.opencontainers.image.licenses=${{ env.IMAGE_LICENSE }}
@@ -274,7 +346,7 @@ jobs:
             org.opencontainers.image.title=${{ env.IMAGE_NAME }}
             org.opencontainers.image.url=https://github.com/${{ github.repository }}/tree/${{ github.sha }}
             org.opencontainers.image.vendor=${{ github.repository_owner }}
-            org.opencontainers.image.version=${{ env.DEFAULT_TAG }}.{{date 'YYYYMMDD'}}
+            org.opencontainers.image.version=${{ needs.generate_matrix.outputs.image_version }}
 
       - name: Login to GitHub Container Registry
         if: inputs.publish
@@ -303,9 +375,15 @@ jobs:
           LABELS: ${{ steps.metadata.outputs.labels }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
           TAGS: ${{ steps.metadata.outputs.tags }}
+          CANDIDATE_IMAGE: ${{ inputs.candidate }}
         run: |
           set -euo pipefail
           : "${SIGNING_SECRET:?SIGNING_SECRET must be configured when publishing}"
+          if [[ "$CANDIDATE_IMAGE" == true ]]; then
+            while IFS= read -r TAG; do
+              [[ "$TAG" == "$DEFAULT_TAG" || "$TAG" == "${DEFAULT_TAG}-${GITHUB_SHA}" ]]
+            done <<< "$TAGS"
+          fi
           sudo install -d -m 0755 "/etc/containers/registries.d/"
           printf 'docker:\n  %s:\n    use-sigstore-attachments: true\n' "${IMAGE_REGISTRY}" | sudo tee "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml" > /dev/null
           sudo chmod 0644 "/etc/containers/registries.d/${REPOSITORY_OWNER}.yaml"
@@ -403,4 +481,16 @@ jobs:
             --insecure-ignore-tlog=true \
             "${IMAGE_REF}"
 
-          gh attestation verify "oci://${IMAGE_REF}" --repo "${GITHUB_REPOSITORY}"
+          # The index and every native image must carry Astral's signature.
+          docker manifest inspect "$IMAGE_REF" > /tmp/published-index.json
+          for architecture in amd64 arm64; do
+            child_digest="$(jq -er --arg arch "$architecture" '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest] | if length == 1 then .[0] else error("missing or duplicate architecture") end' /tmp/published-index.json)"
+            cosign verify --key astral.pub --insecure-ignore-tlog=true \
+              "${IMAGE_REGISTRY}/${IMAGE_NAME}@${child_digest}"
+          done
+
+          gh attestation verify "oci://${IMAGE_REF}" --repo "${GITHUB_REPOSITORY}" \
+            --source-digest "$GITHUB_SHA" --source-ref "$GITHUB_REF" \
+            --signer-digest "$GITHUB_SHA" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/reusable-build-bootc.yaml" \
+            --deny-self-hosted-runners

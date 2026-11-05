@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Migrate only Astral's old factory link. Leave administrator configuration
+# intact, including links to other targets. tmpfiles does not replace links
+# with regular copies on its own.
+config=/etc/tuned/ppd.conf
+if [[ -L "$config" && $(readlink "$config") == /usr/share/astral/tuned/ppd.conf ]]; then
+    rm -- "$config"
+fi
+
+systemd-tmpfiles --create astral-tuned.conf

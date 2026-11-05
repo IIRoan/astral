@@ -2,6 +2,11 @@
 name: Build Astral ISO
 on:
   workflow_dispatch:
+    inputs:
+      source-digest:
+        description: Signed Astral index or AMD64 digest; leave empty to build the production channel
+        type: string
+        required: false
 
 jobs:
   build_release:
@@ -19,48 +24,72 @@ jobs:
       - name: Free disk space
         uses: ./.github/actions/free-disk-space
 
+      - name: Verify and prepare the ISO source
+        id: source
+        env:
+          SRCDIR: ${{ github.workspace }}
+          SOURCE_DIGEST: ${{ inputs.source-digest }}
+        run: |
+          set -euo pipefail
+          build-scripts/ensure-tool crane
+          build-scripts/ensure-tool cosign
+          python3 build-scripts/prepare-iso.py --digest "$SOURCE_DIGEST" \
+            --config "$RUNNER_TEMP/astral-iso.toml" --metadata "$RUNNER_TEMP/astral-iso-source.json"
+          jq -r '"source-image=\(.source_image)\nbuilder-image=\(.builder_image)\nbranding-image=\(.branding_image)"' \
+            "$RUNNER_TEMP/astral-iso-source.json" >> "$GITHUB_OUTPUT"
+
       - name: Build ISO
         id: build-iso
         env:
-          TARGET_IMAGE: ghcr.io/iiroan/astral:latest
-          TARGET_CONFIG: ./iso.toml
+          TARGET_IMAGE: ${{ steps.source.outputs.source-image }}
+          BUILDER_IMAGE: ${{ steps.source.outputs.builder-image }}
         run: |
           set -euo pipefail
-          SOURCE_DIGEST="$(sudo podman manifest inspect "${TARGET_IMAGE}" | jq -er '.manifests[] | select(.platform.architecture == "amd64" and .platform.os == "linux") | .digest')"
-          SOURCE_IMAGE="${TARGET_IMAGE%:*}@${SOURCE_DIGEST}"
-          sudo podman pull "${SOURCE_IMAGE}"
-          echo "ISO source: ${SOURCE_IMAGE}"
-          echo "source-image=${SOURCE_IMAGE}" >> "$GITHUB_OUTPUT"
+          sudo podman pull "${TARGET_IMAGE}"
+          echo "ISO source: ${TARGET_IMAGE}"
           sudo mkdir -p rpm-gpg output
-          sudo podman run --rm -v ./rpm-gpg:/out:Z "${SOURCE_IMAGE}" bash -c 'cp /etc/pki/rpm-gpg/* /out'
+          sudo podman run --rm -v ./rpm-gpg:/out:Z "${TARGET_IMAGE}" bash -euc '
+            keydir=/usr/share/pki/rpm-gpg
+            if [[ ! -d "$keydir" ]]; then keydir=/etc/pki/rpm-gpg; fi
+            cp -L "$keydir"/* /out'
+          mkdir -p "$RUNNER_TEMP/iso-build-context"
+          sudo podman build --network=none --pull=never \
+            --build-arg "SOURCE_IMAGE=${TARGET_IMAGE}" \
+            --file "$PWD/build-scripts/Containerfile.iso-build" \
+            --tag localhost/astral-iso-build-context "$RUNNER_TEMP/iso-build-context"
+          build_container_id="$(sudo podman image inspect --format '{{.Id}}' localhost/astral-iso-build-context)"
+          jq --arg id "$build_container_id" '. + {build_container_id: $id}' \
+            "$RUNNER_TEMP/astral-iso-source.json" > "$RUNNER_TEMP/astral-iso-source.updated.json"
+          mv "$RUNNER_TEMP/astral-iso-source.updated.json" "$RUNNER_TEMP/astral-iso-source.json"
           sudo podman run \
             --rm \
             --privileged \
-            --pull=newer \
             --security-opt label=type:unconfined_t \
-            -v "${TARGET_CONFIG}:/config.toml:ro" \
+            -v "$RUNNER_TEMP/astral-iso.toml:/config.toml:ro" \
             -v ./output/:/output \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
             -v ./rpm-gpg/:/etc/pki/rpm-gpg/:ro \
-            quay.io/centos-bootc/bootc-image-builder:latest \
-            build --type iso --rootfs btrfs --output /output "${SOURCE_IMAGE}"
+            -v ./rpm-gpg/:/usr/share/pki/rpm-gpg/:ro \
+            "$BUILDER_IMAGE" \
+            build --type iso --rootfs btrfs --output /output \
+            --build-container localhost/astral-iso-build-context "${TARGET_IMAGE}"
           echo "output-directory=$(realpath ./output)" >> "$GITHUB_OUTPUT"
 
       - name: Brand ISOs
         env:
           SOURCE_DIR: ${{ steps.build-iso.outputs.output-directory }}
+          BRANDING_IMAGE: ${{ steps.source.outputs.branding-image }}
         run: |
           sudo mv "${SOURCE_DIR}"/*/*.iso "${SOURCE_DIR}/astral-unbranded.iso"
           sudo podman rmi -a -f
           podman rmi -a -f
           sudo podman run \
             --rm \
-            --pull=newer \
             --privileged \
             -v /dev:/dev \
             -v "${SOURCE_DIR}:/output" \
             -v ./assets/iso:/iso \
-            registry.fedoraproject.org/fedora:latest \
+            "$BRANDING_IMAGE" \
             bash -c 'dnf install -y lorax \
             && mkdir /images \
             && cd /iso/product && find . | cpio -c -o | gzip -9cv > /images/product.img && cd / \
@@ -73,6 +102,7 @@ jobs:
           sudo mv "${SOURCE_DIR}"/astral.iso "${SOURCE_DIR}/astral-amd64.iso"
           (cd "${SOURCE_DIR}" && sha256sum astral-amd64.iso | sudo tee astral-amd64.iso-CHECKSUM)
           sudo rm -f "${SOURCE_DIR}/astral-unbranded.iso"
+          sudo install -m 0644 "$RUNNER_TEMP/astral-iso-source.json" "${SOURCE_DIR}/astral-amd64-source.json"
 
       - name: Upload ISO
         uses: chainguard-actions/actions-upload-artifact@c91615377dcc230c6b156542d25044f9b8d80dd8 # v7.0.2
@@ -81,6 +111,8 @@ jobs:
           path: |
             ${{ steps.build-iso.outputs.output-directory }}/astral-amd64.iso
             ${{ steps.build-iso.outputs.output-directory }}/astral-amd64.iso-CHECKSUM
+            ${{ steps.build-iso.outputs.output-directory }}/astral-amd64-source.json
+            ${{ steps.build-iso.outputs.output-directory }}/manifest-iso.json
           if-no-files-found: error
           retention-days: 7
           compression-level: 0

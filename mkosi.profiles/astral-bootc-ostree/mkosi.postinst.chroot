@@ -3,4 +3,4 @@
 set -xeuo pipefail
 
 stat /usr/share/pki/containers/astral.pub
-grep -F -e "ghcr.io/iiroan" /usr/share/factory/etc/containers/policy.json
+grep -F -e "ghcr.io/iiroan" /usr/share/containers/policy.json

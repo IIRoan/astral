@@ -78,8 +78,11 @@ class BuildInputTests(unittest.TestCase):
             "ARCHITECTURE": "x86_64",
             "DIGEST": DIGEST,
             "SIGNER": SIGNER,
+            "RELEASE": "45",
+            "RPM_FEDORA_RELEASE": "45",
         }
         self.stub("uname", "import os; print(os.environ['ARCHITECTURE'])")
+        self.stub("rpm", "import os; print(os.environ['RPM_FEDORA_RELEASE'])")
         self.stub("curl", r'''
 import json, os, shutil, sys
 from pathlib import Path
@@ -228,6 +231,25 @@ if os.environ.get('CORRUPT_DOWNLOAD') == asset:
                 self.prepare("jackrabbit", success=False)
                 self.assertFalse(any(c[1] == "pull" for c in self.calls("oras")))
                 self.assertTrue((cache / "old").exists())
+
+    def test_kernel_uses_target_release_independently_of_tools_release(self):
+        for release, macro, expected in [("44", "45", "44"), ("45", "44", "45"),
+                                         ("46", "45", "46"), ("rawhide", "46", "46")]:
+            with self.subTest(release=release, macro=macro):
+                self.env.update(RELEASE=release, RPM_FEDORA_RELEASE=macro, SIGNATURE_FAILURE="1")
+                self.prepare("jackrabbit", success=False)
+                resolution = next(call for call in reversed(self.calls("oras")) if call[1] == "resolve")
+                self.assertEqual(resolution[-1],
+                                 f"ghcr.io/opengamingcollective/kernel-packages-fedora:latest-fc{expected}")
+                self.assertFalse(any(call[1] == "pull" for call in self.calls("oras")))
+
+    def test_invalid_kernel_release_fails_before_downloads(self):
+        for release, macro in [("", "45"), ("45/other", "45"), ("rawhide", "%fedora")]:
+            with self.subTest(release=release, macro=macro):
+                self.env.update(RELEASE=release, RPM_FEDORA_RELEASE=macro)
+                self.prepare("jackrabbit", success=False)
+                self.assertEqual(self.calls("curl"), [])
+                self.assertEqual(self.calls("oras"), [])
 
     def test_bad_audio_checksum_preserves_existing_caches(self):
         kernel = self.seed_cache("linux-ogc")

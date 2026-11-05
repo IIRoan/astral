@@ -17,7 +17,7 @@ Astral identity.
   networking.
 - Integrated wallpapers, logos, and default dotfiles. This repository has no
   asset or dotfile submodules.
-- A stable Fedora 44 bootc image for AMD64 and ARM64.
+- A stable Fedora 45 bootc image for AMD64 and ARM64.
 
 ## Install
 
@@ -29,6 +29,9 @@ sudo bootc switch ghcr.io/iiroan/astral:latest
 
 The image must be published and signed by the repository workflow before this
 command can be used.
+
+For existing Fedora 44 installations, follow the [Fedora 45 upgrade guide](docs/fedora-45.md)
+to check container networking and local login overrides before updating.
 
 ## Desktop Defaults
 
@@ -48,6 +51,10 @@ Put personal Niri overrides in `~/.config/niri/local.kdl` or system-wide
 overrides in `/etc/niri/local.kdl`. Curated Noctalia defaults live in
 `~/.config/noctalia/config.toml`; GUI changes are stored separately by
 Noctalia under `~/.local/state/noctalia/`.
+
+The [display-color profile](docs/display-color.md) preserves near-white detail
+on the verified Predator XB253Q unit using an unprivileged, per-monitor SDR
+white-level adjustment. It includes override and disable instructions.
 
 ## Containers
 
@@ -83,7 +90,7 @@ Install `mkosi`, `just`, and Podman, then build the standard bootc image:
 just build
 ```
 
-The build tools run in an explicit Fedora 44 tools tree, independently of the
+The build tools run in an explicit Fedora 45 tools tree, independently of the
 host distribution and the image release. Update `ToolsTreeRelease` deliberately
 when changing the build environment.
 

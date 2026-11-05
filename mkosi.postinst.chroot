@@ -1,9 +1,15 @@
 #!/bin/bash
 set -xeuo pipefail
 
+/usr/libexec/astral/display-color --help
+
 install -Dpm0644 -t /usr/share/flatpak/remotes.d/ "$SRCDIR/cache/flathub.flatpakrepo"
 
 niri --version | grep -i -E "niri [[:digit:]]*\.[[:digit:]]*"
+# Satellite 0.8.2 steals focus from Steam/Wine override-redirect popups.
+satellite_version="$(rpm -q --qf '%{VERSION}' xwayland-satellite)"
+rpm --define "astral_satellite_version $satellite_version" --eval \
+    '%{lua:if rpm.vercmp(rpm.expand("%{astral_satellite_version}"), "0.8.3") < 0 then error("Xwayland Satellite 0.8.3 or newer is required") end}'
 niri validate --config /usr/share/factory/etc/niri/config.kdl
 noctalia-greeter sessions | grep -Fqx Niri
 stat /usr/libexec/astral/noctalia-greeter-guard
@@ -13,6 +19,10 @@ test -x /usr/libexec/astral/update-user-setup
 test -x /usr/libexec/astral/composefs-remount
 # thermald's RAPL controller overrides the per-mode power limits in astral-* TuneD profiles.
 test ! -e /usr/lib/systemd/system/thermald.service
+# Ship the regular vendor configuration so OSTree can merge later defaults
+# with local changes. The preparation service also migrates Fedora 44 links.
+install -Dpm0644 /usr/share/astral/tuned/ppd.conf /etc/tuned/ppd.conf
+test -x /usr/libexec/astral/prepare-tuned-ppd
 grep -Fx 'L+ /etc/greetd/config.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 grep -Fx 'C+ /var/lib/noctalia-greeter/greeter.toml 0640 greeter greeter - /usr/share/astral/noctalia-greeter.toml' /usr/lib/tmpfiles.d/99-astral-factory.conf
 grep -Fx 'ConditionFileIsExecutable=/usr/bin/noctalia' /usr/lib/systemd/user/astral-sync-noctalia-greeter.service
@@ -39,7 +49,9 @@ command -v setterm
 command -v pkexec
 
 install -d /usr/share/astral/
-sed --sandbox -i -e '/gnome_keyring.so/ s/-auth/auth/ ; /gnome_keyring.so/ s/-session/session/' /etc/pam.d/greetd
+# Fedora 45 ships vendor PAM configuration in /usr/lib/pam.d. The bootc
+# profile removes any greeter package's /etc copy so it cannot shadow this.
+sed --sandbox -i -e '/gnome_keyring.so/ s/-auth/auth/ ; /gnome_keyring.so/ s/-session/session/' /usr/lib/pam.d/greetd
 # geoclue's demo agent only exists for desktops without their own agent prompt; with no agent geoclue still serves configured apps
 rm -f /etc/xdg/autostart/geoclue-demo-agent.desktop
 install -d /usr/share/bash-completion/completions /usr/share/zsh/site-functions /usr/share/fish/vendor_completions.d/
@@ -77,7 +89,7 @@ PRETTY_NAME="${IMAGE_NAME^}"
 FANCY_NAME="\033[0;38:2:252:186:3;1;49m⸭\033[0;38:2:252:186:3;49m ${IMAGE_NAME^} \033[0m"
 VERSION="$VERSION"
 VERSION_ID="$VERSION_ID"
-VERSION_CODENAME="Pibble"
+VERSION_CODENAME="Cute Chinese Frog"
 ANSI_COLOR="38:2:252:186:3;1;49"
 ANSI_COLOR_REVERSE="48;2;252;186;3;1;30"
 LOGO="${IMAGE_NAME}"

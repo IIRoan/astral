@@ -1,0 +1,9 @@
+# The legacy ISO depsolver uses DNF 4, which cannot discover Fedora 45's
+# vendor repository directory. Adapt only the build container; the installer
+# payload remains the original, verified Astral digest.
+ARG SOURCE_IMAGE
+FROM ${SOURCE_IMAGE}
+RUN if test -d /usr/share/dnf5/repos.d; then \
+        mkdir -p /etc/yum.repos.d && \
+        cp --dereference --update=none /usr/share/dnf5/repos.d/*.repo /etc/yum.repos.d/; \
+    fi

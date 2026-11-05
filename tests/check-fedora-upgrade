@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+
+# Run only inside a disposable, privileged image container. Exercise the real
+# Podman policy lookup with both a fresh installation and Fedora 44's links.
+set -euo pipefail
+
+if [[ ! -e /run/.containerenv && ! -e /.dockerenv ]]; then
+    echo 'Run this check inside a disposable image container.' >&2
+    exit 1
+fi
+
+# shellcheck disable=SC1091
+source /usr/lib/os-release
+test "$VERSION_ID" = 45
+test -n "${IMAGE_VERSION:-}"
+rpm -q kmscon-gl kmscon-freetype kmscon-pango gnome-keyring-pam podman netavark openh264 gutenprint-cups tailscale
+rpm -q xwayland-satellite
+tailscale version
+gst-inspect-1.0 openh264dec > /dev/null
+gst-launch-1.0 -q videotestsrc num-buffers=4 \
+    ! video/x-raw,format=I420,width=320,height=240,framerate=15/1 \
+    ! openh264enc ! openh264dec ! fakesink
+
+# Exercise first-boot state creation rather than relying on state inherited
+# from an older installation. The VM boot test checks enforcing SELinux too.
+systemd-tmpfiles --create astral-gssproxy.conf
+for path in clients rcache; do
+    test "$(stat -c %a /var/lib/gssproxy/"$path")" = 700
+done
+if rpm -q NetworkManager-vpnc; then
+    echo 'The retired NetworkManager-vpnc plugin is still installed.' >&2
+    exit 1
+fi
+
+test -s /usr/lib/pam.d/greetd
+test ! -e /etc/pam.d/greetd
+grep -Eq '^auth[[:space:]]+optional[[:space:]]+pam_gnome_keyring.so' /usr/lib/pam.d/greetd
+grep -Eq '^session[[:space:]]+optional[[:space:]]+pam_gnome_keyring.so[[:space:]]+auto_start' /usr/lib/pam.d/greetd
+grep -Eq '^auth[[:space:]]+include[[:space:]]+greetd$' /usr/lib/pam.d/greetd-spawn
+grep -Fx 'Conflicts=kmsconvt@tty1.service' /usr/lib/systemd/system/greetd.service.d/20-kmscon.conf
+grep -Fx 'After=kmsconvt@tty1.service' /usr/lib/systemd/system/greetd.service.d/20-kmscon.conf
+niri validate --config /usr/share/factory/etc/niri/config.kdl
+noctalia-greeter sessions | grep -Fqx Niri
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+# Reproduce Anaconda's exact initialization on a fresh /var. The packaged CUPS
+# rule assumes its RPM-owned parent exists, but bootc removes packaged /var.
+spool_root="$work/spool-root"
+mkdir -p "$spool_root/etc" "$spool_root/usr/lib" "$spool_root/var/spool"
+cp /etc/passwd /etc/group "$spool_root/etc/"
+for database in passwd group; do
+    if [[ -f /usr/lib/$database ]]; then
+        cp "/usr/lib/$database" "$spool_root/usr/lib/"
+    fi
+done
+cp -a /usr/lib/tmpfiles.d "$spool_root/usr/lib/"
+mv "$spool_root/usr/lib/tmpfiles.d/astral-cups.conf" "$work/astral-cups.conf"
+cups_group="$(getent group lp | cut -d: -f3)"
+spool_permissions_match() {
+    test "$(stat -c '%a %u %g' "$spool_root/var/spool/cups" 2>/dev/null)" = "710 0 $cups_group" &&
+        test "$(stat -c '%a %u %g' "$spool_root/var/spool/cups/tmp" 2>/dev/null)" = "1770 0 $cups_group"
+}
+# Some tmpfiles versions create implicit parents with generic permissions;
+# the installer version can fail outright. Neither provides CUPS's state.
+if systemd-tmpfiles --create --boot --root="$spool_root" --prefix=/var/spool > "$work/cups-before.log" 2>&1 && spool_permissions_match; then
+    echo 'CUPS already initializes its package-owned spool state without the compatibility rule.' >&2
+    exit 1
+fi
+mv "$work/astral-cups.conf" "$spool_root/usr/lib/tmpfiles.d/astral-cups.conf"
+rm -rf "$spool_root/var/spool/cups"
+systemd-tmpfiles --create --boot --root="$spool_root" --prefix=/var/spool
+spool_permissions_match
+printf 'existing-print-job' > "$spool_root/var/spool/cups/tmp/astral-check"
+systemd-tmpfiles --create --boot --root="$spool_root" --prefix=/var/spool
+spool_permissions_match
+test "$(cat "$spool_root/var/spool/cups/tmp/astral-check")" = existing-print-job
+printf 'PASS: fresh Anaconda spool initialization and CUPS directory permissions.\n'
+
+# Exercise the real migration helper, including a previous factory link and
+# an administrator's regular configuration. A fresh image must ship Astral's
+# mapping rather than the package's stock mapping.
+test ! -L /etc/tuned/ppd.conf
+cmp /usr/share/astral/tuned/ppd.conf /etc/tuned/ppd.conf
+test ! -e /var/log/tuned
+/usr/libexec/astral/prepare-tuned-ppd
+test "$(stat -c '%a %u %g' /var/log/tuned)" = '755 0 0'
+printf 'existing-tuned-log' > /var/log/tuned/astral-check
+/usr/libexec/astral/prepare-tuned-ppd
+test "$(cat /var/log/tuned/astral-check)" = existing-tuned-log
+rm /etc/tuned/ppd.conf
+ln -s /usr/share/astral/tuned/ppd.conf /etc/tuned/ppd.conf
+/usr/libexec/astral/prepare-tuned-ppd
+test ! -L /etc/tuned/ppd.conf
+cmp /usr/share/astral/tuned/ppd.conf /etc/tuned/ppd.conf
+printf '# administrator override\n' >> /etc/tuned/ppd.conf
+cp /etc/tuned/ppd.conf "$work/ppd-override.conf"
+/usr/libexec/astral/prepare-tuned-ppd
+cmp "$work/ppd-override.conf" /etc/tuned/ppd.conf
+rm /etc/tuned/ppd.conf
+ln -s "$work/ppd-override.conf" /etc/tuned/ppd.conf
+/usr/libexec/astral/prepare-tuned-ppd
+test "$(readlink /etc/tuned/ppd.conf)" = "$work/ppd-override.conf"
+cmp "$work/ppd-override.conf" /etc/tuned/ppd.conf
+
+# A read-only root with writable state reproduces the bootc failure. Execute
+# the packaged service's actual tmpfiles arguments, not a copy of that command.
+unshare --mount bash -s -- "$work" <<'MOUNT_TEST'
+set -euo pipefail
+mount --make-rprivate /
+fixture="$1/root"
+mkdir -p "$fixture"/{etc,var,run,tmp}
+mount --bind "$fixture" "$fixture"
+for path in etc var run tmp; do
+    mount --bind "$fixture/$path" "$fixture/$path"
+done
+mount -o remount,bind,ro "$fixture"
+cat > "$1/tmpfiles.conf" <<'RULES'
+z / 0700 root root -
+d /etc/astral-group-check 0750 root root -
+d /var/lib/astral-group-check 0750 root root -
+d /run/astral-group-check 0750 root root -
+d /tmp/astral-group-check 0750 root root -
+RULES
+if systemd-tmpfiles --create --root="$fixture" "$1/tmpfiles.conf" > "$1/unscoped.log" 2>&1; then
+    echo 'The read-only root fixture did not reproduce the original failure.' >&2
+    exit 1
+fi
+grep -Fq 'Read-only file system' "$1/unscoped.log"
+for path in etc var/lib run tmp; do
+    rm -rf "$fixture/$path/astral-group-check"
+done
+python3 - "$fixture" "$1/tmpfiles.conf" <<'PY'
+from pathlib import Path
+import shlex
+import subprocess
+import sys
+
+unit = Path('/usr/lib/systemd/system/rechunker-group-fix.service').read_text().splitlines()
+commands = [shlex.split(line.removeprefix('ExecStart=')) for line in unit if line.startswith('ExecStart=systemd-tmpfiles ')]
+assert len(commands) == 1
+subprocess.run([*commands[0], f'--root={sys.argv[1]}', sys.argv[2]], check=True)
+PY
+for path in etc var/lib run tmp; do
+    test "$(stat -c %a "$fixture/$path/astral-group-check")" = 750
+done
+test "$(stat -c %a "$fixture")" = 755
+umount -R "$fixture"
+MOUNT_TEST
+
+export XDG_CONFIG_HOME="$work/config" XDG_DATA_HOME="$work/data"
+mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+
+show_policy() {
+    podman --root "$work/storage" --runroot "$work/runroot" --storage-driver vfs \
+        image trust show --raw > "$work/policy.json"
+}
+
+compare_policy() {
+    python3 - "$1" "$work/policy.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+assert json.loads(Path(sys.argv[1]).read_text()) == json.loads(Path(sys.argv[2]).read_text())
+PY
+}
+
+test ! -e /etc/containers/policy.json
+test ! -e /etc/containers/registries.d/iiroan.yaml
+show_policy
+compare_policy /usr/share/containers/policy.json
+ajust verify-image
+
+# An already deployed Fedora 44 image leaves these absolute factory links in
+# /etc. The compatibility links must resolve to the new vendor files.
+mkdir -p /etc/containers/registries.d
+ln -s /usr/share/factory/etc/containers/policy.json /etc/containers/policy.json
+ln -s /usr/share/factory/etc/containers/registries.d/iiroan.yaml /etc/containers/registries.d/iiroan.yaml
+test "$(readlink -e /etc/containers/policy.json)" = /usr/share/containers/policy.json
+test "$(readlink -e /etc/containers/registries.d/iiroan.yaml)" = /usr/share/containers/registries.d/iiroan.yaml
+show_policy
+compare_policy /usr/share/containers/policy.json
+ajust verify-image
+
+# Administrators retain precedence over the vendor policy.
+rm /etc/containers/policy.json
+printf '{"default":[{"type":"reject"}]}\n' > /etc/containers/policy.json
+show_policy
+compare_policy /etc/containers/policy.json
+if ajust verify-image; then
+    echo 'verify-image ignored the administrator policy override.' >&2
+    exit 1
+fi
+
+printf '%s\n' 'Fedora 45 greeter, TuneD migration, read-only group repair and container policy checks passed.'

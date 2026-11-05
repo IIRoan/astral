@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+# Use the image release, independently of the pinned build-tools release.
+fedora_release="${RELEASE:?mkosi must provide the target Fedora release}"
+if [[ "$fedora_release" = rawhide ]]; then
+    fedora_release="$(rpm -E %fedora)"
+fi
+[[ "$fedora_release" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid target Fedora release for OGC kernel' >&2; exit 1; }
+
 mkdir -p "${SRCDIR}/cache"
 "${SRCDIR}/build-scripts/ensure-tool" oras
 "${SRCDIR}/build-scripts/ensure-tool" cosign
@@ -10,7 +17,7 @@ work="$(mktemp -d "${SRCDIR}/cache/.jackrabbit.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 image=ghcr.io/opengamingcollective/kernel-packages-fedora
-digest="$("${SRCDIR}/cache/oras" resolve "$image:latest-fc44")"
+digest="$("${SRCDIR}/cache/oras" resolve "$image:latest-fc${fedora_release}")"
 [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo 'Invalid OGC kernel image digest' >&2; exit 1; }
 reference="$image@$digest"
 "${SRCDIR}/cache/cosign" verify \

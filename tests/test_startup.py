@@ -61,10 +61,14 @@ class SessionOrderingTests(unittest.TestCase):
             runtime = tmp / "run"
             runtime.mkdir(mode=0o700)
             timer = ROOT / "mkosi.extra/usr/lib/systemd/user/astral-update-user-setup.timer"
+            color_service = ROOT / "mkosi.extra/usr/lib/systemd/user/astral-display-color.service"
             fixtures = {
                 timer.name: timer.read_text(),
+                color_service.name: color_service.read_text().replace(
+                    "/usr/libexec/astral/display-color --apply", "/usr/bin/true --apply"
+                ),
                 "graphical-session.target": (
-                    "[Unit]\nWants=startup-test-compositor.service astral-update-user-setup.timer\n"
+                    "[Unit]\nWants=startup-test-compositor.service astral-update-user-setup.timer astral-display-color.service\n"
                     "After=startup-test-compositor.service\n"
                 ),
                 "startup-test-compositor.service": (
@@ -80,7 +84,7 @@ class SessionOrderingTests(unittest.TestCase):
                 (tmp / name).write_text(data)
             result = subprocess.run(
                 ["systemd-analyze", "--user", "--man=no", "verify",
-                 str(tmp / "graphical-session.target"), str(tmp / timer.name)],
+                 str(tmp / "graphical-session.target"), str(tmp / timer.name), str(tmp / color_service.name)],
                 env=os.environ | {
                     "SYSTEMD_UNIT_PATH": f"{tmp}:/usr/lib/systemd/user:/lib/systemd/user",
                     "XDG_RUNTIME_DIR": str(runtime),

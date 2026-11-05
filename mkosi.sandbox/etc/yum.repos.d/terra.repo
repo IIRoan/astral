@@ -6,11 +6,11 @@ metadata_expire=6h
 type=rpm
 gpgcheck=1
 gpgkey=https://repos.fyralabs.com/terra$releasever/key.asc
-repo_gpgcheck=0
+repo_gpgcheck=1
 enabled=0
 enabled_metadata=1
 countme=1
-exclude=kernel* falcond
+exclude=kernel* falcond extest-steam
 
 [terra-source]
 name=Terra $releasever - Source
@@ -20,6 +20,6 @@ metadata_expire=6h
 type=rpm
 gpgcheck=1
 gpgkey=https://repos.fyralabs.com/terra$releasever-source/key.asc
-repo_gpgcheck=0
+repo_gpgcheck=1
 enabled=0
 enabled_metadata=0

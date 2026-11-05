@@ -1,0 +1,8 @@
+[Unit]
+Description=Prepare TuneD configuration and persistent SELinux labels
+Before=tuned-ppd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/astral/prepare-tuned-ppd
+RemainAfterExit=yes
