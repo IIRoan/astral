@@ -2,6 +2,8 @@
 
 <img src="assets/logos/logo-astral-badge.svg" width="180" alt="Astral logo" />
 
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/astral)](https://artifacthub.io/packages/search?repo=astral)
+
 Astral is an opinionated Fedora bootc desktop built around Niri and Noctalia. It
 keeps Zirconium's container-focused image foundation while giving the desktop,
 developer tooling, image names, defaults, and release pipeline an independent
