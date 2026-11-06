@@ -7,10 +7,14 @@ the helper or replace existing keys.
 
 The helper requires enabled Secure Boot, enabled shim validation, and initialized
 SHA-256 measurements for both PCRs. It checks a separately entered LUKS
-passphrase or recovery key with token auto-unlocking bypassed. Enrollment and
-replacement of old TPM slots happen in one `systemd-cryptenroll` operation:
-systemd creates the new enrollment successfully before removing old TPM slots.
-Password and recovery slots are retained.
+passphrase or recovery key with token auto-unlocking bypassed. It prepares the
+replacement on a root-only temporary LUKS header in `/run`, wiping the copied
+TPM slots before enrolling a fresh binding. This also repairs stale bindings
+after a firmware TPM reset with unchanged PCR measurements. Failed enrollment
+leaves the disk header unchanged. After enrollment succeeds, the helper checks
+that the original header has not changed during setup and applies the prepared
+header. Password and recovery slots are retained; temporary headers are removed
+on exit.
 
 PCRs 7+14 bind the trust policy, rather than the exact kernel or initramfs
 contents. They do not provide the same assurance as a measured UKI with a
@@ -92,8 +96,9 @@ enter the recovery credential for the independent unlock check. Choose whether
 to require a TPM PIN. Escape and the default **Cancel** choice leave enrollment
 unchanged, including at the PIN menu.
 `systemd-cryptenroll` then asks for the credential again to authorize enrollment.
-The replacement removes legacy unbound TPM slots only after successful
-enrollment, while preserving the independent password/recovery slots.
+The disk receives the replacement only after successful enrollment on the
+temporary header, while preserving the independent password/recovery slots.
+Do not run other disk-enrollment tools concurrently with this operation.
 
 The helper refuses ambiguous kernel command lines containing multiple LUKS
 UUIDs; use `--device` in that case. It never reboots the machine automatically.
@@ -135,8 +140,9 @@ ambiguous devices, and enrollment failures without touching real devices.
 `tests/check-tpm-policy` uses a fresh 64 MiB LUKS2 file and a private `swtpm`
 socket. It verifies migration from an unbound enrollment, independent PCR 7
 and PCR 14 rejection, recovery after each failure, restoration after vTPM
-restarts, PIN-protected unlocking, and preservation of the recovery slot when
-TPM unlocking is disabled.
+restarts, PIN-protected unlocking, replacement after a TPM reset with unchanged
+PCRs, failed replacement without disk-header changes, and preservation of the
+recovery slot when TPM unlocking is disabled.
 CI runs this test as part of the required `Image checks` result.
 
 On Fedora, the test prerequisites are `swtpm`, `tpm2-tools`, `cryptsetup`, and

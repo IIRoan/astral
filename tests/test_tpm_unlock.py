@@ -15,7 +15,7 @@ SECRET = "test-only-recovery-secret"
 ENABLE = "Enable or replace TPM2 enrollment"
 DISABLE = "Disable TPM2 auto-unlock"
 STUB = r'''#!/usr/bin/python3
-import json, os, sys
+import json, os, shutil, signal, sys
 from pathlib import Path
 name=Path(sys.argv[0]).name
 args=sys.argv[1:]
@@ -47,10 +47,32 @@ elif name=='systemd-ask-password':
 elif name=='cryptsetup':
     if args[0]=='isLuks':
         sys.exit(int(os.environ.get('LUKS_RC','0')))
+    if args[0]=='luksHeaderBackup':
+        if os.environ.get('BACKUP_RC'): sys.exit(int(os.environ['BACKUP_RC']))
+        target=Path(args[args.index('--header-backup-file')+1])
+        if target.name=='current' and os.environ.get('CONCURRENT_CHANGE'):
+            Path(args[1]).write_text('credentials changed by another tool')
+        shutil.copyfile(args[1],target)
+        sys.exit(0)
+    if args[0]=='luksHeaderRestore':
+        if os.environ.get('RESTORE_RC'): sys.exit(int(os.environ['RESTORE_RC']))
+        assert '--batch-mode' in args
+        shutil.copyfile(args[args.index('--header-backup-file')+1],args[2])
+        sys.exit(0)
     assert '--test-passphrase' in args and '--key-file=-' in args and '--disable-external-tokens' in args
     sys.exit(0 if sys.stdin.read()=='test-only-recovery-secret' else 1)
 elif name=='systemd-cryptenroll':
-    sys.exit(int(os.environ.get('ENROLL_RC','0')))
+    if '--tpm2-device=auto' in args and os.environ.get('INTERRUPT_ENROLLMENT'):
+        os.kill(os.getppid(),signal.SIGTERM)
+        sys.exit(143)
+    code=int(os.environ.get('WIPE_RC' if '--wipe-slot=tpm2' in args else 'ENROLL_RC','0'))
+    if not code:
+        Path(args[-1]).write_text('copied TPM slots wiped' if '--wipe-slot=tpm2' in args else 'fresh TPM binding and preserved recovery')
+    sys.exit(code)
+elif name=='mktemp':
+    path=Path(os.environ['WORKDIR'])
+    path.mkdir(mode=0o700)
+    print(path)
 elif name=='cat' and args==['/proc/cmdline']:
     print(os.environ.get('CMDLINE','quiet rd.luks.uuid=luks-'+os.environ['UUID']))
 elif name=='realpath':
@@ -71,16 +93,17 @@ class TpmUnlockTests(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.device = self.root / "luks.img"
-        self.device.touch()
+        self.device.write_text("original TPM binding and recovery")
         self.env = os.environ | {
             "PATH": f"{self.bin}:/usr/bin:/bin",
             "CALLS": str(self.root / "calls"),
             "PROMPT_COUNT": str(self.root / "prompts"),
             "DEVICE": str(self.device),
+            "WORKDIR": str(self.root / "private-header"),
             "UUID": UUID,
         }
         for name in ("sudo", "gum", "mokutil", "systemd-analyze", "systemd-ask-password",
-                     "cryptsetup", "systemd-cryptenroll", "cat", "realpath"):
+                     "cryptsetup", "systemd-cryptenroll", "mktemp", "cat", "realpath"):
             path = self.bin / name
             path.write_text(STUB)
             path.chmod(0o755)
@@ -94,6 +117,7 @@ class TpmUnlockTests(unittest.TestCase):
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         self.assertNotIn(SECRET, result.stdout + result.stderr)
         self.assertNotIn(SECRET, (self.root / "calls").read_text() if (self.root / "calls").exists() else "")
+        self.assertFalse(Path(self.env["WORKDIR"]).exists(), "Temporary header was not removed")
         return result
 
     def calls(self, name):
@@ -103,17 +127,26 @@ class TpmUnlockTests(unittest.TestCase):
 
     def test_enable_replaces_tpm_only_after_independent_recovery_check(self):
         self.run_helper()
-        enrollment, = self.calls("systemd-cryptenroll")
+        wipe, enrollment = self.calls("systemd-cryptenroll")
+        candidate = str(Path(self.env["WORKDIR"]) / "candidate")
+        self.assertEqual(wipe, ["--wipe-slot=tpm2", candidate])
         self.assertIn("--tpm2-pcrs=7+14", enrollment)
         self.assertIn("--tpm2-device=auto", enrollment)
-        self.assertIn("--wipe-slot=tpm2", enrollment)
+        self.assertNotIn("--wipe-slot=tpm2", enrollment)
         self.assertIn("--tpm2-with-pin=no", enrollment)
-        self.assertEqual(enrollment[-1], str(self.device))
-        self.assertEqual(self.calls("cryptsetup")[-1][0], "open")
+        self.assertEqual(enrollment[-1], candidate)
+        self.assertEqual(self.calls("cryptsetup")[-1], [
+            "luksHeaderRestore", "--batch-mode", str(self.device), "--header-backup-file", candidate,
+        ])
+        self.assertEqual(self.device.read_text(), "fresh TPM binding and preserved recovery")
+        calls = [json.loads(line) for line in (self.root / "calls").read_text().splitlines()]
+        recovery = next(i for i, c in enumerate(calls) if c[:2] == ["cryptsetup", "open"])
+        backup = next(i for i, c in enumerate(calls) if c[:2] == ["cryptsetup", "luksHeaderBackup"])
+        self.assertLess(recovery, backup)
 
     def test_pin_is_opt_in(self):
         self.run_helper(ANSWERS=json.dumps([ENABLE, 0, "Require a PIN"]))
-        self.assertIn("--tpm2-with-pin=yes", self.calls("systemd-cryptenroll")[0])
+        self.assertIn("--tpm2-with-pin=yes", self.calls("systemd-cryptenroll")[-1])
 
     def test_help_and_invalid_arguments_do_not_authenticate(self):
         self.run_helper(args=["--help"])
@@ -183,17 +216,43 @@ class TpmUnlockTests(unittest.TestCase):
         self.run_helper(expected=1, LUKS_RC="1")
         self.assertEqual(self.calls("systemd-cryptenroll"), [])
 
-    def test_failed_enrollment_is_reported_without_a_separate_wipe(self):
+    def test_failed_enrollment_preserves_the_live_header(self):
         result = self.run_helper(expected=42, ENROLL_RC="42")
-        self.assertEqual(len(self.calls("systemd-cryptenroll")), 1)
+        self.assertEqual(len(self.calls("systemd-cryptenroll")), 2)
+        self.assertEqual(self.device.read_text(), "original TPM binding and recovery")
+        self.assertFalse(any(c[0] == "luksHeaderRestore" for c in self.calls("cryptsetup")))
         self.assertNotIn("now binds", result.stdout)
+
+    def test_backup_or_copy_wipe_failure_preserves_the_live_header(self):
+        for env in ({"BACKUP_RC": "42"}, {"WIPE_RC": "42"}):
+            with self.subTest(env=env):
+                self.setUp()
+                self.run_helper(expected=42, **env)
+                self.assertEqual(self.device.read_text(), "original TPM binding and recovery")
+                self.assertFalse(any(c[0] == "luksHeaderRestore" for c in self.calls("cryptsetup")))
+
+    def test_concurrent_credential_change_is_not_overwritten(self):
+        result = self.run_helper(expected=1, CONCURRENT_CHANGE="1")
+        self.assertIn("disk header changed", result.stderr)
+        self.assertEqual(self.device.read_text(), "credentials changed by another tool")
+        self.assertFalse(any(c[0] == "luksHeaderRestore" for c in self.calls("cryptsetup")))
+
+    def test_failed_header_application_does_not_report_success(self):
+        result = self.run_helper(expected=42, RESTORE_RC="42")
+        self.assertNotIn("now binds", result.stdout)
+
+    def test_interrupted_enrollment_cleans_up_and_preserves_the_live_header(self):
+        self.run_helper(expected=143, INTERRUPT_ENROLLMENT="1")
+        self.assertEqual(self.device.read_text(), "original TPM binding and recovery")
+        self.assertFalse(any(c[0] == "luksHeaderRestore" for c in self.calls("cryptsetup")))
 
     def test_kernel_uuid_and_name_forms_resolve_the_same_device(self):
         for value in (f"rd.luks.uuid=luks-{UUID}", f"rd.luks.name={UUID}=cryptroot"):
             with self.subTest(value=value):
                 self.setUp()
                 self.run_helper(args=[], CMDLINE=value)
-                self.assertEqual(self.calls("systemd-cryptenroll")[0][-1], str(self.device))
+                backups = [c for c in self.calls("cryptsetup") if c[0] == "luksHeaderBackup"]
+                self.assertEqual(backups[0][1], str(self.device))
 
     def test_ambiguous_missing_and_invalid_kernel_devices_are_rejected(self):
         for value in ("quiet", "rd.luks.uuid=invalid", f"rd.luks.uuid={UUID} rd.luks.uuid=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"):

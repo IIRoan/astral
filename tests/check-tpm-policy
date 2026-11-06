@@ -20,6 +20,17 @@ for binary in ("swtpm", "tpm2_pcrextend", "cryptsetup", "systemd-cryptenroll"):
     if not shutil.which(binary):
         raise SystemExit(f"Missing test prerequisite: {binary}")
 
+# Image CI pipes this script to Python instead of mounting a source checkout.
+# A test root also lets local checks exercise the same installed file layout.
+if __file__ == "<stdin>":
+    image_root = Path(os.environ.get("ASTRAL_TEST_ROOT", "/"))
+    unlock_helper = image_root / "usr/bin/luks-tpm2-autounlock"
+    secure_helper = image_root / "usr/libexec/astral/secure-tpm2"
+else:
+    repository = Path(__file__).resolve().parents[1]
+    unlock_helper = repository / "mkosi.extra/usr/bin/luks-tpm2-autounlock"
+    secure_helper = repository / "mkosi.extra/usr/libexec/astral/secure-tpm2"
+
 
 with tempfile.TemporaryDirectory(prefix="astral-tpm-policy-") as directory:
     root = Path(directory)
@@ -109,6 +120,11 @@ with tempfile.TemporaryDirectory(prefix="astral-tpm-policy-") as directory:
         run(["cryptsetup", "luksFormat", "--batch-mode", "--type", "luks2",
              "--pbkdf", "pbkdf2", "--pbkdf-force-iterations", "1000",
              f"--key-file={key}", str(image)])
+        # A marker in the data area must survive every header replacement.
+        payload = os.urandom(4096)
+        with image.open("r+b") as stream:
+            stream.seek(20 * 1024 * 1024)
+            stream.write(payload)
         password_slot = metadata()["keyslots"]["0"]
         enroll("")
         assert tpm_tokens()[0]["tpm2-pcrs"] == []
@@ -117,8 +133,8 @@ with tempfile.TemporaryDirectory(prefix="astral-tpm-policy-") as directory:
         print("PASS: legacy unbound enrollment ignores changed PCR state", flush=True)
 
         # Run the guided wizard against this file and private emulator. Only its
-        # UI, boot preflight, filesystem identity and sudo are simulated. Every
-        # enrollment, recovery check, header backup and policy check is real.
+        # UI, boot preflight, runtime directory, filesystem identity and sudo are
+        # simulated. Every enrollment, recovery check and header operation is real.
         tools = root / "wizard-tools"
         tools.mkdir()
         recovery_directory = root / "recovery-media"
@@ -126,7 +142,7 @@ with tempfile.TemporaryDirectory(prefix="astral-tpm-policy-") as directory:
         real_enroll = shutil.which("systemd-cryptenroll")
         stub = tools / "stub"
         stub.write_text('''#!/usr/bin/python3
-import json, os, sys
+import json, os, sys, tempfile
 from pathlib import Path
 name = Path(sys.argv[0]).name
 args = sys.argv[1:]
@@ -145,19 +161,25 @@ elif name == "systemd-analyze": print(json.dumps([{"nr": 7, "sha256": "1"*64}, {
 elif name == "systemd-ask-password": sys.stdout.write(Path(os.environ["WIZARD_KEY"]).read_text())
 elif name == "findmnt":
     print("ext4" if args[-1] == "FSTYPE" else ("system" if args[args.index("-T") + 1] == "/var" else "external"))
+elif name == "mktemp":
+    if args == ["-d", "/run/astral-tpm2.XXXXXXXX"]:
+        print(tempfile.mkdtemp(prefix="private-header-", dir=os.environ["WIZARD_TMP"]))
+    else:
+        os.execv("/usr/bin/mktemp", ["mktemp", *args])
 elif name == "systemd-cryptenroll":
+    if Path(args[-1]).name == "candidate":
+        assert Path(args[-1]).parent.stat().st_mode & 0o777 == 0o700
     args = [a.replace("=auto", "=" + os.environ["WIZARD_TPM"]) if a.startswith(("--tpm2-device=", "--unlock-tpm2-device=")) else a for a in args]
     args += ["--tpm2-public-key=", "--tpm2-pcrlock="]
     if any(a.startswith("--tpm2-device=") for a in args):
-        args += ["--unlock-key-file=" + os.environ["WIZARD_KEY"]]
+        args += ["--unlock-key-file=" + os.environ.get("WIZARD_ENROLL_KEY", os.environ["WIZARD_KEY"])]
     os.execv(os.environ["WIZARD_ENROLL"], [os.environ["WIZARD_ENROLL"], *args])
 else: raise AssertionError(name)
 ''')
         stub.chmod(0o755)
-        for name in ("sudo", "gum", "mokutil", "systemd-analyze", "systemd-ask-password", "findmnt", "systemd-cryptenroll"):
+        for name in ("sudo", "gum", "mokutil", "systemd-analyze", "systemd-ask-password", "findmnt", "mktemp", "systemd-cryptenroll"):
             (tools / name).symlink_to(stub)
-        repository = Path(__file__).resolve().parents[1]
-        (tools / "luks-tpm2-autounlock").symlink_to(repository / "mkosi.extra/usr/bin/luks-tpm2-autounlock")
+        (tools / "luks-tpm2-autounlock").symlink_to(unlock_helper)
         wizard_env = env | {
             "PATH": str(tools) + ":" + env["PATH"],
             "WIZARD_COUNTER": str(root / "wizard-counter"),
@@ -165,8 +187,9 @@ else: raise AssertionError(name)
                                           str(recovery_directory), 0, 0,
                                           "Enable or replace TPM2 enrollment", 0, "No PIN"]),
             "WIZARD_KEY": str(key), "WIZARD_TPM": device, "WIZARD_ENROLL": real_enroll,
+            "WIZARD_TMP": str(root),
         }
-        run(["bash", str(repository / "mkosi.extra/usr/libexec/astral/secure-tpm2"),
+        run(["bash", str(secure_helper),
              "--apply", "--device", str(image)], test_env=wizard_env)
         assert len(tpm_tokens()) == 1 and tpm_tokens()[0]["tpm2-pcrs"] == [7, 14]
         assert any(t["type"] == "systemd-recovery" for t in metadata()["tokens"].values())
@@ -185,6 +208,22 @@ else: raise AssertionError(name)
              "--disable-external-tokens", "--key-file=-", str(restored)], recovery_input=key.read_text())
         print("PASS: guided setup creates recovery, migrates policy, and produces a restorable private header backup", flush=True)
 
+        def replace(*, credential=key, tpm_device=device, with_pin=False, succeeds=True):
+            counter = root / "replace-counter"
+            counter.unlink(missing_ok=True)
+            test_env = wizard_env | {
+                "WIZARD_COUNTER": str(counter),
+                "WIZARD_ANSWERS": json.dumps(["Enable or replace TPM2 enrollment", 0,
+                                              "Require a PIN" if with_pin else "No PIN"]),
+                "WIZARD_ENROLL_KEY": str(credential), "WIZARD_TPM": tpm_device,
+            }
+            if "NEWPIN" in env:
+                test_env["NEWPIN"] = env["NEWPIN"]
+            result = run(["bash", str(unlock_helper),
+                          "--device", str(image)], succeeds=succeeds, test_env=test_env)
+            assert not list(root.glob("private-header-*")), "Temporary headers were not removed"
+            return result
+
         stop()
         start()
         recover()
@@ -194,14 +233,38 @@ else: raise AssertionError(name)
         enroll("7+14", unlock_tpm=True)
         print("PASS: explicit migration replaces the legacy TPM slot and preserves recovery", flush=True)
 
+        # A new emulator state models a firmware TPM clear without changing PCRs.
+        stale = tpm_tokens()[0]
+        independent_slots = {s: v for s, v in metadata()["keyslots"].items() if s not in stale["keyslots"]}
+        stop()
+        shutil.rmtree(state)
+        state.mkdir()
+        start()
+        enroll("7+14", unlock_tpm=True, succeeds=False)
+        replace()
+        assert len(tpm_tokens()) == 1 and tpm_tokens()[0]["tpm2-pcrs"] == [7, 14]
+        assert tpm_tokens()[0]["tpm2-blob"] != stale["tpm2-blob"]
+        assert all(metadata()["keyslots"][s] == v for s, v in independent_slots.items())
+        enroll("7+14", unlock_tpm=True)
+        recover()
+        print("PASS: the helper repairs a cleared TPM with unchanged PCRs and retains independent recovery slots", flush=True)
+
         previous = metadata()
-        enroll("7+14", credential=bad_key, succeeds=False)
+        with image.open("rb") as stream:
+            previous_header = stream.read(16 * 1024 * 1024)
+        replace(credential=bad_key, succeeds=False)
         assert metadata() == previous
+        with image.open("rb") as stream:
+            assert stream.read(16 * 1024 * 1024) == previous_header
+        enroll("7+14", unlock_tpm=True)
         print("PASS: failed authorization preserves the existing enrollment", flush=True)
 
         previous = metadata()
-        enroll("7+14", tpm_device=f"swtpm:path={root / 'unavailable.sock'}", succeeds=False)
+        replace(tpm_device=f"swtpm:path={root / 'unavailable.sock'}", succeeds=False)
         assert metadata() == previous
+        with image.open("rb") as stream:
+            assert stream.read(16 * 1024 * 1024) == previous_header
+        enroll("7+14", unlock_tpm=True)
         recover()
         print("PASS: failed new TPM enrollment preserves the working TPM and recovery slots", flush=True)
 
@@ -220,7 +283,7 @@ else: raise AssertionError(name)
 
         # These fixed credentials belong only to the private emulator fixture.
         env["NEWPIN"] = "disposable-vtpm-pin"
-        enroll("7+14", with_pin=True)
+        replace(with_pin=True)
         assert tpm_tokens()[0]["tpm2-pin"] is True
         env["PIN"] = env["NEWPIN"]
         enroll("7+14", unlock_tpm=True, with_pin=True)
@@ -235,6 +298,16 @@ else: raise AssertionError(name)
         recover()
         assert metadata()["keyslots"]["0"] == password_slot
         print("PASS: disabling TPM enrollment retains the independent recovery credential", flush=True)
+
+        replace()
+        assert len(tpm_tokens()) == 1 and tpm_tokens()[0]["tpm2-pcrs"] == [7, 14]
+        enroll("7+14", unlock_tpm=True)
+        recover()
+        print("PASS: first enrollment without an existing TPM token retains independent recovery", flush=True)
+        with image.open("rb") as stream:
+            stream.seek(20 * 1024 * 1024)
+            assert stream.read(len(payload)) == payload
+        print("PASS: header replacements leave the encrypted data area unchanged", flush=True)
     finally:
         stop()
         server_log.close()
