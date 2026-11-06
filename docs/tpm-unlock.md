@@ -22,6 +22,37 @@ and [shim TPM measurements](https://github.com/rhboot/shim/blob/main/README.tpm)
 
 ## Prepare recovery
 
+For guided setup, run:
+
+```sh
+ajust secure-tpm2
+```
+
+The wizard checks Secure Boot/shim measurements, lets you use an existing
+recovery credential or create one through the current TPM enrollment, and asks
+for an existing folder on protected external recovery storage. It refuses
+temporary filesystems and the encrypted system filesystem. Confirm that the
+storage is separate and protected; a different filesystem alone does not prove
+that it is on a separate physical device.
+
+It saves protected LUKS header backups before changes, after adding a recovery
+key, and after verified enrollment. A newly generated recovery key is displayed
+directly in the terminal and must be saved offline. It is never written to a
+log or passed as a command argument. Cancellation after creating a recovery key
+retains that new credential and the original TPM enrollment.
+
+The existing enrollment helper then checks the recovery credential independently
+and offers PIN selection. Choose **Enable or replace TPM2 enrollment** when
+prompted. The wizard checks PCRs 7+14 and retention of all independent key slots
+afterward. It leaves rebooting and boot-time recovery tests to you.
+Canceling the enrollment helper stops the wizard without reporting successful
+setup; any recovery credential already created and header backups are retained.
+
+The standalone `/usr/libexec/astral/secure-tpm2` checks the current policy without
+changing enrollment by default. Add `--apply` for guided setup and `--device`
+to select a particular encrypted device. The manual commands below remain
+available.
+
 Use the LUKS device UUID, rather than the UUID of the filesystem inside it.
 For multiple encrypted devices, choose the intended device explicitly.
 

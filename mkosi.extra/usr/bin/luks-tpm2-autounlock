@@ -5,15 +5,24 @@ set -euo pipefail
 set +x
 
 usage() {
-  printf 'Usage: luks-tpm2-autounlock [--device LUKS2_DEVICE]\n'
+  printf 'Usage: luks-tpm2-autounlock [--report-cancel] [--device LUKS2_DEVICE]\n'
+  printf 'With --report-cancel, cancellation exits with status 130 instead of 0.\n'
 }
 
-if (( $# == 1 )) && [[ "$1" == --help || "$1" == -h ]]; then
-  usage
-  exit 0
-elif (( $# == 2 )) && [[ "$1" == --device ]]; then
-  candidate="$2"
-elif (( $# == 0 )); then
+cancel_status=0
+candidate=''
+while (( $# )); do
+  case "$1" in
+    --report-cancel) cancel_status=130; shift ;;
+    --device)
+      if (( $# < 2 )) || [[ -z "$2" || -n "$candidate" ]]; then usage >&2; exit 2; fi
+      candidate="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+done
+
+if [[ -z "$candidate" ]]; then
   uuid=''
   read -r -a boot_args <<< "$(cat /proc/cmdline)"
   for arg in "${boot_args[@]}"; do
@@ -39,9 +48,6 @@ elif (( $# == 0 )); then
     exit 1
   fi
   candidate="/dev/disk/by-uuid/$uuid"
-else
-  usage >&2
-  exit 2
 fi
 
 if ! crypt_disk="$(realpath -e -- "$candidate")" || [[ ! -b "$crypt_disk" && ! -f "$crypt_disk" ]]; then
@@ -51,19 +57,19 @@ fi
 
 if ! action="$(gum choose --header="TPM2 auto-unlock for $crypt_disk" \
   Cancel 'Enable or replace TPM2 enrollment' 'Disable TPM2 auto-unlock')"; then
-  exit 0
+  exit "$cancel_status"
 fi
 case "$action" in
   'Enable or replace TPM2 enrollment') choice=0 ;;
   'Disable TPM2 auto-unlock') choice=1 ;;
-  Cancel) exit 0 ;;
+  Cancel) exit "$cancel_status" ;;
   *) echo 'Unexpected TPM action selection.' >&2; exit 1 ;;
 esac
 
 echo 'Keep a working LUKS passphrase or recovery key available for boot recovery.'
 if ! gum confirm --default=false --affirmative=Continue --negative=Cancel \
   'I have my recovery credential available and will verify it before changing TPM enrollment.'; then
-  exit 0
+  exit "$cancel_status"
 fi
 
 sudo -v
@@ -111,12 +117,12 @@ if [[ "$choice" == 1 ]]; then
 fi
 
 if ! pin_choice="$(gum choose --header='PIN policy for PCRs 7+14' Cancel 'Require a PIN' 'No PIN')"; then
-  exit 0
+  exit "$cancel_status"
 fi
 case "$pin_choice" in
   'Require a PIN') pin_arg=--tpm2-with-pin=yes ;;
   'No PIN') pin_arg=--tpm2-with-pin=no ;;
-  Cancel) exit 0 ;;
+  Cancel) exit "$cancel_status" ;;
   *) echo 'Unexpected PIN selection.' >&2; exit 1 ;;
 esac
 

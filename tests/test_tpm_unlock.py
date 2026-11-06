@@ -115,14 +115,27 @@ class TpmUnlockTests(unittest.TestCase):
         self.run_helper(ANSWERS=json.dumps([ENABLE, 0, "Require a PIN"]))
         self.assertIn("--tpm2-with-pin=yes", self.calls("systemd-cryptenroll")[0])
 
+    def test_help_and_invalid_arguments_do_not_authenticate(self):
+        self.run_helper(args=["--help"])
+        for args in (["--device"], ["--device", ""], ["--report-cancel", "--device"],
+                     ["--device", str(self.device), "--device", str(self.device)], ["--unknown"]):
+            with self.subTest(args=args):
+                self.run_helper(expected=2, args=args)
+        self.assertEqual(self.calls("sudo"), [])
+        self.assertEqual(self.calls("gum"), [])
+
     def test_cancel_at_each_prompt_does_not_change_enrollment(self):
-        for answers in ([1], [130], ["Cancel"], [ENABLE, 1], [ENABLE, 0, 1],
-                        [ENABLE, 0, 130], [ENABLE, 0, "Cancel"]):
-            with self.subTest(answers=answers):
-                self.setUp()
-                self.run_helper(ANSWERS=json.dumps(answers))
-                self.assertEqual(len(self.calls("gum")), len(answers))
-                self.assertEqual(self.calls("systemd-cryptenroll"), [])
+        for report_cancel in (False, True):
+            for answers in ([1], [130], ["Cancel"], [ENABLE, 1], [ENABLE, 0, 1],
+                            [ENABLE, 0, 130], [ENABLE, 0, "Cancel"]):
+                with self.subTest(report_cancel=report_cancel, answers=answers):
+                    self.setUp()
+                    args = ["--device", str(self.device)]
+                    if report_cancel:
+                        args.insert(0, "--report-cancel")
+                    self.run_helper(expected=130 if report_cancel else 0, args=args, ANSWERS=json.dumps(answers))
+                    self.assertEqual(len(self.calls("gum")), len(answers))
+                    self.assertEqual(self.calls("systemd-cryptenroll"), [])
 
     def test_wrong_recovery_credential_or_agent_failure_does_not_enroll(self):
         for change in ({"SECRET_INPUT": "wrong"}, {"ASK_RC": "1"}):
