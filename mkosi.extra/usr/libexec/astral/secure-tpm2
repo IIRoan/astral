@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+set -euo pipefail
+set +x
+umask 077
+
+usage() {
+    echo 'Usage: secure-tpm2 [--apply] [--device LUKS2_DEVICE]'
+    echo 'Checks the current policy by default; --apply starts guided recovery and enrollment.'
+}
+
+apply=false
+candidate=''
+while (( $# )); do
+    case "$1" in
+        --apply) apply=true; shift ;;
+        --device)
+            if (( $# < 2 )) || [[ -n "$candidate" ]]; then usage >&2; exit 2; fi
+            candidate="$2"; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *) usage >&2; exit 2 ;;
+    esac
+done
+
+if [[ -z "$candidate" ]]; then
+    uuid=''
+    read -r -a boot_args <<< "$(cat /proc/cmdline)"
+    for arg in "${boot_args[@]}"; do
+        case "$arg" in
+            rd.luks.uuid=*|rd.luks.name=*)
+                value="${arg#*=}"; value="${value%%=*}"; value="${value#luks-}"
+                if [[ ! "$value" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] ||
+                    [[ -n "$uuid" && "$uuid" != "$value" ]]; then
+                    echo 'Choose the encrypted disk explicitly with --device.' >&2; exit 1
+                fi
+                uuid="$value"
+                ;;
+        esac
+    done
+    if [[ -z "$uuid" ]]; then echo 'No encrypted disk found; use --device.' >&2; exit 1; fi
+    candidate="/dev/disk/by-uuid/$uuid"
+fi
+
+crypt_disk="$(realpath -e -- "$candidate")"
+if [[ ! -b "$crypt_disk" && ! -f "$crypt_disk" ]]; then
+    echo 'The selected encrypted disk does not exist.' >&2; exit 1
+fi
+sudo -v
+sudo cryptsetup isLuks --type luks2 "$crypt_disk"
+
+policy_summary() {
+    sudo cryptsetup luksDump --dump-json-metadata "$crypt_disk" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+tokens = [t for t in d.get("tokens", {}).values() if t.get("type") == "systemd-tpm2"]
+tpm_slots = {str(s) for t in tokens for s in t.get("keyslots", [])}
+print(json.dumps({
+    "pcrs": [t.get("tpm2-pcrs", []) for t in tokens],
+    "pin": [t.get("tpm2-pin", False) for t in tokens],
+    "independent_slots": sorted(set(d["keyslots"]) - tpm_slots),
+}))'
+}
+
+before="$(policy_summary)"
+python3 -c '
+import json, sys
+p = json.loads(sys.argv[1])
+policy = ", ".join("+".join(map(str, v)) if v else "unbound" for v in p["pcrs"]) or "not enrolled"
+print("Current TPM unlock policy: " + policy)
+print("Independent credential slots: " + str(len(p["independent_slots"])))
+' "$before"
+if ! "$apply"; then
+    echo 'No changes made. Run ajust secure-tpm2 to start guided setup.'
+    exit 0
+fi
+
+if ! secure_boot_state="$(sudo env LC_ALL=C mokutil --sb-state)" || [[ "$secure_boot_state" != 'SecureBoot enabled' ]]; then
+    echo 'Enable Secure Boot and shim validation before securing TPM unlock.' >&2; exit 1
+fi
+sudo systemd-analyze --json=short pcrs 7 14 | python3 -c '
+import json, re, sys
+values = {r["nr"]: r.get("sha256", "") for r in json.load(sys.stdin)}
+for number in (7, 14):
+    value = values.get(number, "")
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", value) or value.lower() in ("0" * 64, "f" * 64):
+        sys.exit("Secure Boot/shim measurements are missing; enrollment was not changed.")'
+
+if ! gum confirm --default=false 'Prepare recovery backups and secure TPM disk unlocking?'; then exit 0; fi
+if ! recovery_mode="$(gum choose --header='Independent recovery credential' \
+    Cancel 'Use an existing passphrase or recovery key' 'Create a recovery key using the existing TPM enrollment')"; then exit 0; fi
+case "$recovery_mode" in
+    Cancel) exit 0 ;;
+    'Use an existing passphrase or recovery key') create_recovery=false ;;
+    'Create a recovery key using the existing TPM enrollment')
+        create_recovery=true
+        if ! python3 -c 'import json,sys; sys.exit(not json.loads(sys.argv[1])["pcrs"])' "$before"; then
+            echo 'No existing TPM enrollment can authorize recovery-key creation. Use an existing passphrase.' >&2
+            exit 1
+        fi
+        ;;
+    *) echo 'Unexpected recovery selection.' >&2; exit 1 ;;
+esac
+
+if ! backup_input="$(gum input --char-limit=0 --header='Existing folder on protected external recovery storage' \
+    --placeholder='/run/media/your-user/RECOVERY')" || [[ -z "$backup_input" ]]; then exit 0; fi
+backup_root="$(realpath -e -- "$backup_input")"
+if [[ ! -d "$backup_root" || ! -w "$backup_root" ]]; then
+    echo 'Choose an existing writable recovery folder.' >&2; exit 1
+fi
+backup_fs="$(findmnt -rn -T "$backup_root" -o FSTYPE)"
+backup_uuid="$(findmnt -rn -T "$backup_root" -o UUID)"
+system_uuid="$(findmnt -rn -T /var -o UUID)"
+case "$backup_fs" in
+    tmpfs|ramfs|overlay|composefs|'') echo 'Recovery storage must persist independently of this session.' >&2; exit 1 ;;
+esac
+if [[ -n "$backup_uuid" && "$backup_uuid" == "$system_uuid" ]]; then
+    echo 'Choose recovery storage outside the encrypted system filesystem.' >&2; exit 1
+fi
+if ! gum confirm --default=false 'This folder is on protected recovery storage separate from my system disk.'; then exit 0; fi
+backup_dir="$(mktemp -d -- "$backup_root/astral-tpm2-XXXXXXXX")"
+if [[ "$(stat -c '%a' -- "$backup_dir")" != 700 ]]; then
+    echo 'Recovery storage must support private directory permissions.' >&2; exit 1
+fi
+echo "Recovery folder: $backup_dir"
+backup_header() {
+    sudo cryptsetup luksHeaderBackup "$crypt_disk" --header-backup-file "$backup_dir/$1.img"
+    sudo chmod 0600 "$backup_dir/$1.img"
+    if [[ "$(stat -c '%a' -- "$backup_dir/$1.img")" != 600 ]]; then
+        echo 'Recovery storage must support private header-backup permissions.' >&2; return 1
+    fi
+}
+backup_header header-before
+if "$create_recovery"; then
+    echo 'Save the recovery key displayed below offline. You will enter it again during verification.'
+    sudo systemd-cryptenroll --unlock-tpm2-device=auto --recovery-key "$crypt_disk"
+    if ! gum confirm --default=false 'I saved the recovery key offline and can enter it again.'; then
+        echo 'A recovery key was added; the existing TPM enrollment has not been replaced.'
+        exit 0
+    fi
+    backup_header header-with-recovery
+fi
+before_enrollment="$(policy_summary)"
+echo 'Choose Enable or replace TPM2 enrollment in the next menu. A PIN adds a prompt at boot.'
+enrollment_status=0
+luks-tpm2-autounlock --report-cancel --device "$crypt_disk" || enrollment_status=$?
+case "$enrollment_status" in
+    0) ;;
+    130)
+        echo "Setup canceled. Keep the recovery material in $backup_dir."
+        exit 0
+        ;;
+    *)
+        echo "Enrollment did not complete. Keep the recovery material in $backup_dir." >&2
+        exit 1
+        ;;
+esac
+after="$(policy_summary)"
+if ! python3 -c '
+import json, sys
+before, after = map(json.loads, sys.argv[1:])
+if after["pcrs"] != [[7, 14]]:
+    sys.exit("A single TPM enrollment bound to PCRs 7+14 was not verified.")
+if not before["independent_slots"] or not set(before["independent_slots"]) <= set(after["independent_slots"]):
+    sys.exit("Preservation of independent recovery slots was not verified.")
+' "$before_enrollment" "$after"; then
+    echo "Setup is incomplete. Keep the recovery material in $backup_dir." >&2
+    exit 1
+fi
+backup_header header-secured
+printf '%s\n' "$after" > "$backup_dir/policy.json"
+echo 'Verified TPM binding to Secure Boot/shim PCRs 7+14 and preservation of independent recovery slots.'
+echo "Protected header backups: $backup_dir"
+echo 'Save your work, keep the recovery key ready, then run: systemctl reboot'
+echo 'Firmware, dbx or MOK changes can require the recovery credential at a later boot.'

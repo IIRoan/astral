@@ -56,7 +56,7 @@ jobs:
       - name: Check maintenance and build shell scripts
         run: |
           shellcheck mkosi.extra/usr/bin/luks-tpm2-autounlock \
-            mkosi.extra/usr/libexec/astral/{update-health,update-user-setup,firmware-update-check,composefs-remount,sync-noctalia-greeter,prepare-tuned-ppd} \
+            mkosi.extra/usr/libexec/astral/{update-health,update-user-setup,firmware-update-check,composefs-remount,sync-noctalia-greeter,prepare-tuned-ppd,secure-tpm2} \
             mkosi.profiles/brew/mkosi.extra/usr/libexec/astral/{brew-locked,install-brew-lock} \
             build-scripts/ensure-tool build-scripts/build-display-color mkosi.build.chroot \
             mkosi.profiles/{brew,jackrabbit}/mkosi.prepare.chroot \

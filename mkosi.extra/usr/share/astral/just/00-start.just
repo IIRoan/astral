@@ -424,6 +424,11 @@ toggle-updates ACTION="prompt":
 
 alias toggle-tpm2 := toggle-luks-tpm2
 
+# Prepare recovery backups, secure TPM2 unlock, and verify the enrollment
+[group('System')]
+secure-tpm2:
+    @/usr/libexec/astral/secure-tpm2 --apply
+
 # TPM2 auto-unlock toggle
 [group('System')]
 toggle-luks-tpm2:
