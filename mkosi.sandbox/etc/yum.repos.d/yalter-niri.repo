@@ -2,7 +2,7 @@
 name=Copr repo for niri owned by yalter
 baseurl=https://download.copr.fedorainfracloud.org/results/yalter/niri/fedora-$releasever-$basearch/
 type=rpm-md
-skip_if_unavailable=True
+skip_if_unavailable=False
 gpgcheck=1
 gpgkey=https://download.copr.fedorainfracloud.org/results/yalter/niri/pubkey.gpg
 repo_gpgcheck=0
