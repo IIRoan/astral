@@ -126,9 +126,26 @@ case "$pin_choice" in
   *) echo 'Unexpected PIN selection.' >&2; exit 1 ;;
 esac
 
-# systemd enrolls successfully before wiping old TPM slots; passphrase and
-# recovery slots are preserved. Do not split this into separate commands.
-sudo systemd-cryptenroll --wipe-slot=tpm2 --tpm2-device=auto --tpm2-pcrs=7+14 "$pin_arg" "$crypt_disk"
+# systemd skips enrollment when a token has the same PCR policy, even if a TPM
+# reset made that token unusable. Prepare a fresh binding on a private header
+# copy so failed enrollment still leaves the original TPM and recovery intact.
+work="$(sudo mktemp -d /run/astral-tpm2.XXXXXXXX)"
+trap 'sudo rm -rf -- "$work"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+sudo cryptsetup luksHeaderBackup "$crypt_disk" --header-backup-file "$work/original"
+sudo cp -- "$work/original" "$work/candidate"
+sudo systemd-cryptenroll --wipe-slot=tpm2 "$work/candidate"
+sudo systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7+14 "$pin_arg" "$work/candidate"
+
+# Do not overwrite credentials changed by another tool while setup prompted.
+sudo cryptsetup luksHeaderBackup "$crypt_disk" --header-backup-file "$work/current"
+if ! sudo cmp -s -- "$work/original" "$work/current"; then
+  echo 'The disk header changed during setup; the replacement was not applied. Run setup again.' >&2
+  exit 1
+fi
+sudo cryptsetup luksHeaderRestore --batch-mode "$crypt_disk" --header-backup-file "$work/candidate"
 echo 'TPM2 enrollment now binds to Secure Boot/shim PCRs 7+14.'
 echo 'Keep the verified recovery credential available and test a normal reboot.'
 echo 'Secure Boot, dbx, or MOK changes can require recovery unlock and re-enrollment.'
