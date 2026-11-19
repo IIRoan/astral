@@ -149,7 +149,7 @@ jobs:
         uses: ./.github/actions/setup-mkosi
 
       - name: Install just
-        uses: chainguard-actions/extractions-setup-just@38218e009000cd406ac24efa9ec66d37f202dd66 # v4
+        uses: chainguard-actions/extractions-setup-just@02df584f81228381f579dc3205531cc0233d97b5 # v4
 
       - name: Render configuration (for debugging)
         run: mkosi cat-config --debug
