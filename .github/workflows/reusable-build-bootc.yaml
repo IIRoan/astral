@@ -211,7 +211,7 @@ jobs:
           podman run --rm --privileged -i --entrypoint=/usr/bin/bash \
             "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" < tests/check-fedora-upgrade
 
-      - name: Check Xwayland popup focus in the built image
+      - name: Check Xwayland popup focus and Vicinae in the built image
         run: |
           podman run --rm --init --privileged \
             --volume "$GITHUB_WORKSPACE/tests:/usr/share/astral-tests:ro" \
@@ -221,7 +221,8 @@ jobs:
              for attempt in {1..10}; do
                echo "Xwayland popup focus check ${attempt}/10"
                bash /usr/share/astral-tests/check-xwayland-popup
-             done'
+             done
+             bash /usr/share/astral-tests/check-vicinae'
 
       - name: Check TPM recovery with the built Fedora encryption tools
         run: |

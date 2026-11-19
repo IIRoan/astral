@@ -3,7 +3,7 @@ binds {
     Mod+T hotkey-overlay-title="Open a Terminal" { spawn "xdg-terminal-exec"; }
     Shift+Mod+T hotkey-overlay-title="Open a Terminal" { spawn "xdg-terminal-exec"; }
     Mod+E hotkey-overlay-title="Open File Manager" { spawn "nautilus"; }
-    Mod+Space hotkey-overlay-title="Open Launcher" { spawn "noctalia" "msg" "panel-toggle" "launcher"; }
+    Mod+Space repeat=false hotkey-overlay-title="Open Launcher" { spawn "vicinae" "toggle"; }
     Mod+S hotkey-overlay-title="Open Control Center" { spawn "noctalia" "msg" "panel-toggle" "control-center"; }
     Mod+Ctrl+Comma hotkey-overlay-title="Open Noctalia Settings" { spawn "noctalia" "msg" "settings-toggle"; }
     Mod+L hotkey-overlay-title="Lock Screen" { spawn "noctalia" "msg" "session" "lock"; }
