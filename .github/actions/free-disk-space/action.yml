@@ -16,7 +16,7 @@ runs:
 
     - name: Free disk space
       if: steps.space.outputs.cleanup == 'true'
-      uses: chainguard-actions/jlumbroso-free-disk-space@681db05c7e0d9d3fbf2b213501aa9ed2b7df3a5e # v2.0.0
+      uses: chainguard-actions/jlumbroso-free-disk-space@a2e2c35d0febfcae92086c2ee6da2a8b602b368d # v2.0.0
       with:
         preinstalled-runtimes: false
         docker-images: false
