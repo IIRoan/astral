@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Run inside a disposable image container with Weston and dbus-daemon installed.
+set -euo pipefail
+
+if [[ ! -e /run/.containerenv && ! -e /.dockerenv ]]; then
+    echo 'Run this check inside a disposable image container.' >&2
+    exit 1
+fi
+
+if [[ "${1:-}" == --session ]]; then
+    work="$2"
+    exec > "$work/session.log" 2>&1
+    launcher_pid=
+    trap 'result=$?; [[ -z "$launcher_pid" ]] || kill "$launcher_pid" 2>/dev/null || true; if (( result != 0 )); then touch "$work/failed"; fi' EXIT
+    /usr/libexec/astral/prepare-vicinae
+    # Exercise image defaults and user overrides without monitoring input or
+    # collecting telemetry in the test environment.
+    python3 - "$XDG_CONFIG_HOME/vicinae/settings.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+settings = json.loads(path.read_text())
+settings.update(
+    input_server={"enabled": False},
+    telemetry={"system_info": False},
+    providers={"files": {"preferences": {"autoIndexing": False}}},
+)
+path.write_text(json.dumps(settings))
+PY
+    mkdir -p "$XDG_DATA_HOME/applications"
+    cat > "$XDG_DATA_HOME/applications/astral-vicinae-smoke.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Astral Vicinae Smoke
+Exec=/usr/bin/touch $work/launched
+EOF
+    vicinae server > "$work/vicinae.log" 2>&1 &
+    launcher_pid=$!
+    for _ in {1..100}; do
+        timeout 1s vicinae ping >/dev/null 2>&1 && break
+        kill -0 "$launcher_pid"
+        sleep 0.1
+    done
+    timeout 5s vicinae ping
+    timeout 5s vicinae toggle
+    for _ in {1..50}; do
+        timeout 1s vicinae state open && break
+        sleep 0.1
+    done
+    timeout 5s vicinae state open
+    # Use explicit close so this check does not depend on keyboard focus from
+    # the headless parent compositor.
+    timeout 5s vicinae close
+    for _ in {1..50}; do
+        if ! timeout 1s vicinae state open; then
+            break
+        fi
+        sleep 0.1
+    done
+    if timeout 5s vicinae state open; then
+        echo 'Closing did not hide the launcher.' >&2
+        exit 1
+    else
+        test "$?" -eq 1
+    fi
+    timeout 5s vicinae ping
+    timeout 5s vicinae app launch astral-vicinae-smoke
+    for _ in {1..100}; do
+        [[ -f "$work/launched" ]] && break
+        sleep 0.1
+    done
+    test -f "$work/launched"
+    touch "$work/passed"
+    exit 0
+fi
+
+work="$(mktemp -d)"
+weston_pid=
+niri_pid=
+# shellcheck disable=SC2329 # Invoked by the EXIT trap.
+cleanup() {
+    for pid in "$niri_pid" "$weston_pid"; do
+        if [[ -n "$pid" ]]; then
+            kill -- "-$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
+    rm -rf "$work"
+}
+trap 'cleanup' EXIT
+export XDG_RUNTIME_DIR="$work/runtime" XDG_CONFIG_HOME="$work/config"
+export XDG_DATA_HOME="$work/data" XDG_STATE_HOME="$work/state" XDG_CACHE_HOME="$work/cache"
+mkdir -m 0700 "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
+export LIBGL_ALWAYS_SOFTWARE=1
+unset DISPLAY WAYLAND_DISPLAY NIRI_SOCKET DBUS_SESSION_BUS_ADDRESS
+
+script="$(realpath "$0")"
+printf 'hotkey-overlay { skip-at-startup; }\nspawn-at-startup "bash" "%s" "--session" "%s"\n' \
+    "$script" "$work" > "$work/niri.kdl"
+setsid weston --backend=headless --renderer=pixman --socket=astral-vicinae-test \
+    --no-config --idle-time=0 --width=1280 --height=800 > "$work/weston.log" 2>&1 &
+weston_pid=$!
+for _ in {1..100}; do
+    [[ -S "$XDG_RUNTIME_DIR/astral-vicinae-test" ]] && break
+    kill -0 "$weston_pid" || { cat "$work/weston.log"; exit 1; }
+    sleep 0.1
+done
+test -S "$XDG_RUNTIME_DIR/astral-vicinae-test"
+export WAYLAND_DISPLAY=astral-vicinae-test
+setsid dbus-run-session -- niri --config "$work/niri.kdl" > "$work/niri.log" 2>&1 &
+niri_pid=$!
+for _ in {1..300}; do
+    if [[ -f "$work/passed" ]]; then
+        echo 'Vicinae startup, visibility controls, and desktop app launch passed in nested Niri.'
+        exit 0
+    fi
+    [[ ! -f "$work/failed" ]] || break
+    kill -0 "$niri_pid" || break
+    sleep 0.1
+done
+cat "$work/weston.log" "$work/niri.log" "$work/session.log" "$work/vicinae.log"
+echo 'Vicinae smoke test did not complete.' >&2
+exit 1

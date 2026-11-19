@@ -11,6 +11,14 @@ satellite_version="$(rpm -q --qf '%{VERSION}' xwayland-satellite)"
 rpm --define "astral_satellite_version $satellite_version" --eval \
     '%{lua:if rpm.vercmp(rpm.expand("%{astral_satellite_version}"), "0.8.3") < 0 then error("Xwayland Satellite 0.8.3 or newer is required") end}'
 niri validate --config /usr/share/factory/etc/niri/config.kdl
+# Vicinae is updated with the image, including its runtime dependencies. Terra
+# does not currently grant its dedicated input helper the upstream capability.
+rpm -q vicinae
+test -x /usr/libexec/astral/prepare-vicinae
+test -x /usr/libexec/vicinae/vicinae-server
+test -x /usr/libexec/vicinae/vicinae-input-server
+setcap cap_dac_override=ep /usr/libexec/vicinae/vicinae-input-server
+getcap /usr/libexec/vicinae/vicinae-input-server | grep -Fx '/usr/libexec/vicinae/vicinae-input-server cap_dac_override=ep'
 noctalia-greeter sessions | grep -Fqx Niri
 stat /usr/libexec/astral/noctalia-greeter-guard
 stat /usr/libexec/astral/firmware-update-check
