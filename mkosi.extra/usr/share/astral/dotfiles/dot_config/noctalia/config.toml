@@ -11,15 +11,6 @@ position = "top"
 # Native prompts for greeter sync and other pkexec actions.
 polkit_agent = true
 password_style = "default"
-# Overview typing opens Noctalia's built-in launcher; use Mod+Space for Vicinae.
-niri_overview_type_to_launch_enabled = false
-
-[widget.launcher.actions]
-left = "exec vicinae toggle"
-
-[theme.templates]
-enable_community_templates = true
-community_ids = ["vicinae"]
 
 [shell.greeter_sync]
 auto_sync = true

@@ -1,84 +1,39 @@
-# Vicinae launcher
+# Noctalia launcher
 
-Astral includes Vicinae from Terra as its default application launcher. Niri's
-`Mod+Space` shortcut and Noctalia's launcher bar widget both toggle Vicinae.
-Noctalia continues to provide the bar, notifications, lock screen, wallpaper
-picker, Control Center, and `Alt+Tab` window switcher.
+Astral uses Noctalia's built-in application launcher. Press `Mod+Space` or use
+Noctalia's launcher widget to open it. Launcher settings, colors, session actions,
+and updates are managed by Noctalia; no separate launcher daemon is needed.
 
-## Startup and configuration
+## Returning from an image with Vicinae
 
-Niri starts the packaged `vicinae.service` user unit. It inherits the graphical
-session environment, restarts the daemon on failure, and stops with the session.
-There is no second `vicinae server` process in Niri's startup configuration.
-
-Before the daemon starts, Astral seeds `~/.config/vicinae/settings.json` only if
-it does not already exist. The file imports `/usr/share/astral/vicinae-defaults.json`:
-image updates can change those defaults while GUI settings in the user file
-take precedence. `XDG_CONFIG_HOME` is respected.
-
-The defaults use the Wayland overlay layer so the launcher opens above
-fullscreen apps, show a compact search bar before typing, and reset navigation
-when closed. Noctalia's `vicinae` community template keeps the colors in sync.
-The first theme download requires network access; Vicinae's built-in theme
-works before the template is available.
-
-The image grants `cap_dac_override=ep` only to Vicinae's dedicated
-`vicinae-input-server`, as required upstream for automatic pasting and snippet
-expansion. The main launcher remains unprivileged. This is applied and checked
-on every image build, including when Terra updates the helper.
-
-## Existing users
-
-Personal Niri bindings override image defaults. If `~/.config/niri/local.kdl`
-still opens Noctalia's launcher, replace that binding with:
+Existing user overrides are preserved across image updates. If `Mod+Space`
+still starts Vicinae, change its binding in `~/.config/niri/local.kdl` to:
 
 ```kdl
-Mod+Space repeat=false hotkey-overlay-title="Open Launcher" {
-    spawn "vicinae" "toggle";
+Mod+Space repeat=false hotkey-overlay-title="Application Launcher" {
+    spawn "noctalia" "msg" "panel-toggle" "launcher";
 }
 ```
 
-Inside the existing `binds` block, keep every other shortcut. Validate and reload
-with `niri validate` and `niri msg action load-config-file`.
+Validate and reload the Niri configuration:
 
-Noctalia GUI overrides take precedence over its managed `config.toml`. In
-Settings, disable **Niri overview type to launch**, enable the **Vicinae**
-community template under Templates, and set the launcher widget's left-click
-action to `exec vicinae toggle` if you previously customized these settings.
-Keep any other enabled community templates.
-
-If Vicinae was already configured, add `/usr/share/astral/vicinae-defaults.json`
-to its existing `imports` array to opt into Astral's defaults. Existing settings
-are never overwritten automatically.
-
-Typing directly in Niri's overview is a Noctalia-specific integration that
-opens its built-in launcher. Astral disables it by default; use `Mod+Space` to
-open Vicinae from the overview. Re-enabling it restores the Noctalia launcher
-for that gesture. Noctalia plugins and launcher search prefixes are not
-automatically converted into Vicinae extensions.
-
-## Updates and troubleshooting
-
-Vicinae and its dependencies are part of Astral's image. Daily image builds
-pick up Terra updates, and the normal automatic updater or `ajust update`
-stages the image for the next reboot. Do not use `rpm-ostree install vicinae`:
-host package layering prevents the existing `bootc` updater from upgrading.
-Extensions installed through Vicinae's stores have their own lifecycle inside
-Vicinae; they are not image packages.
-
-Inspect or restart the launcher with:
-
-```bash
-systemctl --user status vicinae.service
-journalctl --user -u vicinae.service
-systemctl --user restart vicinae.service
-vicinae toggle
+```sh
+niri validate --config ~/.config/niri/config.kdl
+niri msg action load-config-file
 ```
 
-If you use an input method and its suggestions appear behind the launcher,
-override `launcher_window.layer_shell.layer` to `top` in Vicinae's settings.
-That trades fullscreen visibility for correct input-method popup stacking.
+In Noctalia, restore the launcher widget's default action if it was customized
+to `exec vicinae toggle`, disable the Vicinae community theme template, and
+re-enable **Niri overview type to launch** if desired. Keep any other enabled
+theme templates and launcher preferences.
 
-Vicinae initially indexes the configured file-search directories. Narrow those
-paths or disable file search in Vicinae's settings if the initial scan is too
-expensive.
+While running an older image that still starts Vicinae, stop and mask its user
+service to prevent it starting again at login:
+
+```sh
+systemctl --user mask --now vicinae.service
+```
+
+The next image without the Vicinae integration removes its package and session
+startup hook. Existing personal Vicinae settings are not deleted by an image
+update; they can be archived or removed independently.

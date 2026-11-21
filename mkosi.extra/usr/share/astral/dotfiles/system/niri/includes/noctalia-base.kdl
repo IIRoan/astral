@@ -16,5 +16,3 @@ switch-events {
 }
 
 spawn-at-startup "noctalia"
-// Starting the packaged unit also covers existing users after an image update.
-spawn-at-startup "systemctl" "--user" "start" "vicinae.service"
