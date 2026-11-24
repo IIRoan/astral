@@ -17,3 +17,8 @@ test -x /usr/libexec/astral/install-brew-lock
 stat /usr/lib/systemd/system/astral-brew-lock.service
 stat /usr/lib/systemd/system/brew-update.service.d/50-astral-brew-proxy.conf
 stat /usr/lib/systemd/system/brew-upgrade.service.d/50-astral-brew-proxy.conf
+
+# Let sudo find Homebrew commands. Append to Fedora's secure_path rather than
+# replacing it from sudoers.d, so later Fedora changes to the path still apply.
+sed -Ei 's|secure_path = (.*)|secure_path = \1:/home/linuxbrew/.linuxbrew/bin|' /etc/sudoers
+grep -Eq '^Defaults[[:space:]]+secure_path = .*:/home/linuxbrew/\.linuxbrew/bin$' /etc/sudoers
