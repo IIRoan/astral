@@ -21,6 +21,9 @@ Before=systemd-user-sessions.service
 
 [Service]
 Type=oneshot
+# systemd-tmpfiles exits DATAERR/CANTCREAT when only some entries fail;
+# don't fail the whole unit over those.
+SuccessExitStatus=DATAERR CANTCREAT
 ExecStart=bash -c 'touch /etc/gshadow && chmod 600 /etc/gshadow'
 ExecStart=bash -c 'rm /etc/gshadow'
 ExecStart=systemd-sysusers
