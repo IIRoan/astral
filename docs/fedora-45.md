@@ -41,10 +41,8 @@ KMSCON is included on Fedora 45. Greetd continues to reserve tty1 and conflicts
 with `kmsconvt@tty1.service`; other virtual terminals remain available.
 
 Xwayland Satellite must be at least 0.8.3 to include the Steam/Wine popup-focus
-fix. While Fedora 45's stable repository still has 0.8.2, the build uses a
-separate Fedora updates-testing repository filtered to `xwayland-satellite`.
-RPM signatures remain required. The minimum version also permits newer stable
-packages; remove the temporary repository once stable Fedora carries the fix.
+fix. Fedora 45's stable repositories have carried 0.8.3 since November 7, 2026,
+and the image build rejects anything older.
 
 The retired NetworkManager-vpnc plugin is removed. Migrate any saved Cisco
 IPsec VPN profiles to a supported alternative before upgrading; the separate

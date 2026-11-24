@@ -117,10 +117,8 @@ update:
     update_system() {
         if [[ -e /sysroot/ostree || -e /sysroot/composefs ]]; then
             pkexec bootc upgrade
-        elif command -v pompona-update >/dev/null 2>&1; then
-            pompona-update
         else
-            echo "No bootc or pompona update path available" >&2
+            echo "Not a bootc system" >&2
             return 1
         fi
     }
