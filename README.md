@@ -10,7 +10,6 @@ top of Zirconium's container-focused image foundation.
 ## Included
 
 - Niri with Noctalia v5 and Noctalia Greeter.
-- Vicinae as the Spotlight-style application launcher.
 - Rootless Podman with Docker CLI compatibility.
 - `docker compose` backed by `podman-compose`, with the Podman user socket
   enabled for Docker API-compatible tools.
@@ -36,7 +35,7 @@ Astral starts Noctalia directly from Niri and reserves these shortcuts:
 
 | Shortcut | Action |
 | --- | --- |
-| `Mod+Space` | Vicinae launcher |
+| `Mod+Space` | Noctalia launcher |
 | `Mod+S` | Control center |
 | `Mod+Ctrl+Comma` | Noctalia settings |
 | `Mod+L` | Lock session |
@@ -49,10 +48,9 @@ overrides in `/etc/niri/local.kdl`. Curated Noctalia defaults live in
 `~/.config/noctalia/config.toml`; GUI changes are stored separately by
 Noctalia under `~/.local/state/noctalia/`.
 
-Vicinae starts as a systemd user service with the Niri session and follows
-Noctalia's palette through its community template. See the
-[launcher guide](docs/launcher.md) for existing-user overrides, configuration,
-and the overview-typing limitation.
+Noctalia's built-in launcher shares the shell's theme and update lifecycle.
+See the [launcher guide](docs/launcher.md) for returning from an older image
+that used Vicinae.
 
 ## Containers
 
@@ -87,11 +85,6 @@ next normal reboot; automatic updates never restart your session. `ajust status`
 shows update health, and a desktop notification repeats daily while an update
 failure or pending reboot is unresolved. Firmware is checked daily and applied
 with `ajust update-firmware`.
-
-Vicinae and its dependencies are included in the image from Terra. They update
-through the same daily image builds, automatic updates, and `ajust update`,
-and take effect after reboot. No separate installer or host package layering is
-required. Extensions installed inside Vicinae are managed separately by Vicinae.
 
 Homebrew's Brewfile dump and cleanup leave out Cargo, Flatpak, Go, Krew, npm,
 uv, and VS Code packages; see `/etc/homebrew/brew.env`.
