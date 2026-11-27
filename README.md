@@ -78,6 +78,9 @@ ajust update
 ajust --help
 ```
 
+To remove a separately installed NymVPN Flatpak and daemon, follow the
+[NymVPN cleanup guide](docs/remove-nymvpn.md).
+
 ## Updates
 
 The system image and Flatpaks update daily. A new image is staged until your
